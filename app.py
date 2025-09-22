@@ -1,4 +1,3 @@
-# Interfaz gráfica para ORCA - Versión final
 import streamlit as st
 import os
 import subprocess
