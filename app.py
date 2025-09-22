@@ -17,9 +17,20 @@ from utils import (
     verificar_convergencia_optimizacion
 )
 
-st.set_page_config(page_title="Visualizador ORCA", layout="wide")
-st.title("Interfaz Gráfica para ORCA 🧪")
+# === CONFIGURACIÓN DE PÁGINA ===
+st.set_page_config(
+    page_title="ORCA Molecular Calculator",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
+# === ENCABEZADO PRINCIPAL ===
+col1, col2 = st.columns([3, 1])
+with col1:
+    st.title("🧬 ORCA Molecular Calculator")
+    st.markdown("*Calculadora cuántica para análisis molecular*")
+
+# === INICIALIZACIÓN DE VARIABLES DE SESIÓN ===
 if "calculo_completado" not in st.session_state:
     st.session_state.calculo_completado = False
 if "opt_convergida" not in st.session_state:
@@ -48,36 +59,78 @@ if "nombre_trabajo" not in st.session_state:
 DIR_CALCULOS = "calculations"
 os.makedirs(DIR_CALCULOS, exist_ok=True)
 
+# === BARRA LATERAL REDISEÑADA ===
 with st.sidebar:
-    st.header("Configuración del Cálculo")
+    # Logo/Header
+    st.markdown("### ⚛️ Panel de Control")
+    st.markdown("---")
 
-    archivo_subido = st.file_uploader("Cargar Molécula (.xyz)", type=["xyz"])
+    # Sección 1: Cargar Molécula
+    st.markdown("#### 📁 **Molécula de Entrada**")
+    archivo_subido = st.file_uploader(
+        "Selecciona archivo .xyz",
+        type=["xyz"],
+        help="Carga la geometría inicial de tu molécula"
+    )
 
     if archivo_subido is not None:
         st.session_state.xyz_inicial = archivo_subido.getvalue().decode("utf-8")
         st.session_state.nombre_trabajo = os.path.splitext(archivo_subido.name)[0]
+        st.success(f"✅ {archivo_subido.name}")
 
-    tipo_calculo = st.selectbox(
-        "Tipo de Cálculo",
+    st.markdown("---")
+
+    # Sección 2: Tipo de Cálculo
+    st.markdown("#### 🧮 **Tipo de Cálculo**")
+    tipo_calculo = st.radio(
+        "Selecciona el tipo de análisis:",
         ["Optimización de Geometría", "Frecuencias Vibracionales (IR)"],
-        key="selector_tipo_calculo"
+        label_visibility="collapsed",
+        help="Selecciona el tipo de análisis cuántico"
     )
 
-    with st.expander("Configuración Avanzada"):
-        metodo = st.text_input("Método/Funcional", "B3LYP")
-        conjunto_base = st.text_input("Conjunto Base", "6-31+G(d,p)")
-        palabras_clave = st.text_input("Palabras Clave Adicionales", "D3BJ TIGHTSCF")
-
+    # Factor de escalamiento solo para IR
     factor_escalamiento = 1.0
     if tipo_calculo == "Frecuencias Vibracionales (IR)":
-        factor_escalamiento = st.number_input(
-            "Factor de Escalamiento IR",
-            min_value=0.8, max_value=1.2, value=0.9679, step=0.001,
-            help="Factor para corregir las frecuencias calculadas. Valor común para B3LYP/6-31G(d): ~0.96"
+        st.markdown("##### 📊 Factor de Escalamiento")
+        factor_escalamiento = st.slider(
+            "Factor IR",
+            min_value=0.80, max_value=1.20, value=0.9679, step=0.001,
+            help="Corrección para frecuencias calculadas"
         )
 
-    boton_ejecutar = st.button("▶️ Run", use_container_width=True)
+    st.markdown("---")
 
+    # Sección 3: Configuración Computacional
+    st.markdown("#### ⚙️ **Configuración Computacional**")
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        metodo = st.selectbox("Método", ["B3LYP", "PBE0", "M06-2X", "wB97X-D"])
+    with col_b:
+        conjunto_base = st.selectbox("Base", ["6-31+G(d,p)", "6-311++G(d,p)", "cc-pVDZ", "def2-SVP"])
+
+    palabras_clave = st.text_input("Palabras clave extra", "D3BJ TIGHTSCF")
+
+    st.markdown("---")
+
+    # Botón de ejecución más prominente
+    st.markdown("#### 🚀 **Ejecutar Cálculo**")
+    boton_ejecutar = st.button(
+        "🎯 **CALCULAR**",
+        use_container_width=True,
+        type="primary",
+        help="Inicia el cálculo cuántico con ORCA"
+    )
+
+    # Estado del sistema
+    if st.session_state.calculo_completado:
+        if st.session_state.opt_convergida:
+            st.success("✅ Cálculo completado")
+        else:
+            st.warning("⚠️ No convergió")
+
+# === LÓGICA DE EJECUCIÓN (SIN CAMBIOS) ===
 if boton_ejecutar:
     if st.session_state.xyz_inicial is None:
         st.sidebar.error("Por favor, carga un archivo .xyz primero.")
@@ -102,7 +155,6 @@ if boton_ejecutar:
         with open(ruta_entrada, "w") as f:
             f.write(contenido_entrada)
 
-        # Ejecutar ORCA
         with st.spinner(f"Ejecutando ORCA para '{nombre_trabajo}'... Esto puede tardar varios minutos."):
             try:
                 comando = f"orca {ruta_entrada} > {ruta_salida}"
@@ -143,136 +195,170 @@ if boton_ejecutar:
 
         st.rerun()
 
-# Pestañas
-tab1, tab2, tab3 = st.tabs(
-    ["Resultados del Cálculo", "Análisis Detallado", "Demostración Visual"]
-)
+# === CONTENIDO PRINCIPAL REDISEÑADO ===
 
-with tab1:
-    st.header("Visualización Molecular")
-    if not st.session_state.calculo_completado and st.session_state.xyz_inicial is None:
-        st.info("Carga un archivo .xyz en la barra lateral para empezar.")
-
-    col1, col2 = st.columns(2)
+# Mostrar información básica si hay resultados
+if st.session_state.energia_final is not None:
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.subheader("Molécula Inicial")
+        st.metric("🔋 Energía Final", f"{st.session_state.energia_final:.6f} Eh")
+    with col2:
+        estado = "✅ Convergido" if st.session_state.opt_convergida else "❌ No convergió"
+        st.metric("📊 Estado", estado)
+    with col3:
+        if st.session_state.xyz_optimizada:
+            num_atomos = len([l for l in st.session_state.xyz_optimizada.split('\n')[2:] if l.strip()])
+            st.metric("⚛️ Átomos", f"{num_atomos}")
+    with col4:
+        st.metric("🧮 Método", f"{metodo}/{conjunto_base}")
+
+# === PESTAÑAS REORGANIZADAS ===
+tabs = st.tabs(["🔬 **Visualización 3D**", "📈 **Espectroscopía**", "⚡ **Análisis Energético**", "🔧 **Datos Técnicos**"])
+
+# === PESTAÑA 1: VISUALIZACIÓN 3D ===
+with tabs[0]:
+    if not st.session_state.calculo_completado and st.session_state.xyz_inicial is None:
+        st.info("💡 Carga un archivo .xyz en la barra lateral para empezar.")
+
+    # Visualización molecular mejorada
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("### 🧪 **Geometría Inicial**")
         if st.session_state.xyz_inicial:
             vista = py3Dmol.view(width=400, height=400)
             vista.addModel(st.session_state.xyz_inicial, 'xyz')
-            vista.setStyle({'stick': {}})
+            vista.setStyle({'stick': {'radius': 0.15}, 'sphere': {'radius': 0.3}})
+            vista.setBackgroundColor('white')
             vista.zoomTo()
-            showmol(vista, height=500, width=500)
+            showmol(vista, height=450, width=450)
         else:
-            st.write("No se ha cargado ninguna molécula.")
+            st.info("Carga una molécula para visualizar")
 
     with col2:
-        st.subheader("Geometría Optimizada")
+        st.markdown("### 🎯 **Geometría Optimizada**")
         if st.session_state.xyz_optimizada:
             if not st.session_state.opt_convergida:
-                st.warning("Esta es la última geometría antes de que el cálculo fallara.")
+                st.warning("⚠️ Geometría no completamente optimizada")
             vista_opt = py3Dmol.view(width=400, height=400)
             vista_opt.addModel(st.session_state.xyz_optimizada, 'xyz')
-            vista_opt.setStyle({'stick': {}})
+            vista_opt.setStyle({'stick': {'radius': 0.15}, 'sphere': {'radius': 0.3}})
+            vista_opt.setBackgroundColor('white')
             vista_opt.zoomTo()
-            showmol(vista_opt, height=500, width=500)
+            showmol(vista_opt, height=450, width=450)
         elif st.session_state.calculo_completado:
-            st.warning("No se pudo extraer una geometría optimizada del archivo de salida.")
+            st.error("❌ No se pudo extraer la geometría optimizada")
         else:
-            st.write("Ejecuta un cálculo para ver el resultado.")
+            st.info("Ejecuta un cálculo para ver la optimización")
 
-    if st.session_state.energia_final is not None:
-        st.metric("Energía Total Final (Hartree)", f"{st.session_state.energia_final:.6f}")
+# === PESTAÑA 2: ESPECTROSCOPÍA ===
+with tabs[1]:
+    if st.session_state.datos_ir is not None and not st.session_state.datos_ir.empty:
+        st.markdown("### 📊 **Espectro Infrarrojo (IR)**")
 
-    if st.session_state.resumen_log_orca:
-        with st.expander("Ver Resumen del Log de ORCA"):
-            st.code(st.session_state.resumen_log_orca, language='text')
+        # Crear gráfico mejorado
+        fig, ax = plt.subplots(figsize=(12, 6))
+        ax.stem(st.session_state.datos_ir["Frequency"], st.session_state.datos_ir["Intensity"],
+                basefmt=' ', linefmt='red', markerfmt='ro')
+        ax.set_xlabel("Número de onda (cm⁻¹)", fontsize=12)
+        ax.set_ylabel("Intensidad IR (km/mol)", fontsize=12)
+        ax.set_title("Espectro IR Teórico", fontsize=14, fontweight='bold')
+        ax.invert_xaxis()
+        ax.grid(True, alpha=0.3)
+        ax.set_facecolor('#fafafa')
 
-with tab2:
-    st.header("Análisis Detallado")
+        st.pyplot(fig)
 
-    if not st.session_state.calculo_completado:
-        st.info("Ejecuta un cálculo para ver los resultados detallados.")
+        # Tabla de frecuencias
+        st.markdown("#### 📋 **Tabla de Frecuencias**")
+        df_display = st.session_state.datos_ir.copy()
+        df_display.columns = ['Frecuencia (cm⁻¹)', 'Intensidad (km/mol)']
+        st.dataframe(
+            df_display.style.format({"Frecuencia (cm⁻¹)": "{:.2f}", "Intensidad (km/mol)": "{:.2f}"}),
+            use_container_width=True
+        )
+
+    elif st.session_state.ultimo_tipo_calculo == "Frecuencias Vibracionales (IR)":
+        st.warning("⚠️ No se encontraron datos del espectro IR. Verifica que la optimización haya convergido.")
     else:
-        # Herramientas de análisis
-        st.subheader("Descarga y Análisis")
-        if st.session_state.log_completo_orca:
-            st.download_button(
-                label="📥 Descargar Log Completo (.out)",
-                data=st.session_state.log_completo_orca,
-                file_name=f"{st.session_state.nombre_trabajo}.out",
-                mime="text/plain"
-            )
-            with st.expander("Ver Log Completo en el Navegador"):
-                st.code(st.session_state.log_completo_orca, language='text')
+        st.info("💡 Selecciona 'Frecuencias Vibracionales (IR)' para ver el espectro.")
 
-        if not st.session_state.opt_convergida:
-            st.error(
-                "¡Atención! La optimización de la geometría no convergió. Los resultados pueden no ser confiables.")
-
-        st.markdown("---")
-
-        # Componentes de Energía
+# === PESTAÑA 3: ANÁLISIS ENERGÉTICO ===
+with tabs[2]:
+    if not st.session_state.calculo_completado:
+        st.info("💡 Ejecuta un cálculo para ver el análisis energético.")
+    else:
+        # Componentes de energía
         if st.session_state.datos_energia is not None:
-            st.subheader("Componentes de Energía")
-            st.dataframe(st.session_state.datos_energia)
+            st.markdown("### ⚡ **Componentes Energéticos**")
+
+            # Visualización mejorada de energías
+            df_energia = st.session_state.datos_energia.copy()
+            df_energia['Valor (eV)'] = df_energia['Energía (Hartree)'] * 27.2114  # Conversión a eV
+
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                st.dataframe(df_energia, use_container_width=True)
+            with col2:
+                st.markdown("##### 📊 **Conversiones**")
+                st.markdown("- **1 Hartree** = 27.21 eV")
+                st.markdown("- **1 Hartree** = 627.5 kcal/mol")
 
         # Cargas Atómicas
         if st.session_state.datos_cargas:
-            st.subheader("Cargas Atómicas Parciales")
-            if 'Mulliken' in st.session_state.datos_cargas and not st.session_state.datos_cargas['Mulliken'].empty:
-                st.write("**Cargas de Mulliken**")
-                st.dataframe(st.session_state.datos_cargas['Mulliken'])
-            if 'Loewdin' in st.session_state.datos_cargas and not st.session_state.datos_cargas['Loewdin'].empty:
-                st.write("**Cargas de Loewdin**")
-                st.dataframe(st.session_state.datos_cargas['Loewdin'])
+            st.markdown("---")
+            st.markdown("### ⚛️ **Análisis de Cargas Atómicas**")
 
-        # Espectro IR
-        if st.session_state.datos_ir is not None and not st.session_state.datos_ir.empty:
-            st.subheader("Espectro Infrarrojo (IR)")
-            fig, ax = plt.subplots()
-            ax.stem(st.session_state.datos_ir["Frequency"], st.session_state.datos_ir["Intensity"])
-            ax.set_xlabel("Número de onda (cm⁻¹)")
-            ax.set_ylabel("Intensidad (km/mol)")
-            ax.set_title("Espectro IR Teórico (Escalado)")
-            ax.invert_xaxis()
-            st.pyplot(fig)
-            with st.expander("Ver Tabla de Frecuencias"):
-                st.dataframe(st.session_state.datos_ir.style.format({"Frequency": "{:.2f}", "Intensity": "{:.2f}"}))
-        elif st.session_state.ultimo_tipo_calculo == "Frecuencias Vibracionales (IR)":
-            st.warning("No se encontraron datos del espectro IR. Esto es normal si la optimización no convergió.")
+            col1, col2 = st.columns(2)
+            with col1:
+                if 'Mulliken' in st.session_state.datos_cargas and not st.session_state.datos_cargas['Mulliken'].empty:
+                    st.markdown("#### 🔵 **Cargas de Mulliken**")
+                    st.dataframe(st.session_state.datos_cargas['Mulliken'], use_container_width=True)
 
-with tab3:
-    st.header("Demostración Visual")
-    st.info(
-        "ℹ️ Esta pestaña contiene una **demostración** con datos sintéticos para mostrar capacidades de visualización.")
+            with col2:
+                if 'Loewdin' in st.session_state.datos_cargas and not st.session_state.datos_cargas['Loewdin'].empty:
+                    st.markdown("#### 🟢 **Cargas de Loewdin**")
+                    st.dataframe(st.session_state.datos_cargas['Loewdin'], use_container_width=True)
 
-    # Simulación Dinámica
-    st.subheader("Simulación Molecular Dinámica")
+# === PESTAÑA 4: DATOS TÉCNICOS ===
+with tabs[3]:
+    if not st.session_state.calculo_completado:
+        st.info("💡 Ejecuta un cálculo para ver los datos técnicos.")
+    else:
+        # Información técnica y logs
+        col1, col2 = st.columns([2, 1])
 
-    n_pasos, n_polimero, n_agua = 50, 15, 30
-    np.random.seed(42)
-    if "cuadros" not in st.session_state:
-        cuadros = []
-        for paso in range(n_pasos):
-            cadena_polimero = np.cumsum(np.random.randn(n_polimero, 3) * 0.2, axis=0)
-            aguas = np.random.rand(n_agua, 3) * 6 - 3
-            cuadros.append((cadena_polimero.copy(), aguas.copy()))
-        st.session_state.cuadros = cuadros
+        with col1:
+            st.markdown("### 📋 **Log de ORCA**")
+            if st.session_state.log_completo_orca:
+                with st.expander("📄 Ver log completo", expanded=False):
+                    st.code(st.session_state.log_completo_orca, language='text')
 
-    cuadro_actual = st.slider("Cuadro de Animación", 0, n_pasos - 1, 0, key="slider_cuadro_demo")
+                st.download_button(
+                    label="💾 Descargar archivo .out",
+                    data=st.session_state.log_completo_orca,
+                    file_name=f"{st.session_state.nombre_trabajo}.out",
+                    mime="text/plain"
+                )
 
-    polimero, aguas = st.session_state.cuadros[cuadro_actual]
-    traza_polimero = go.Scatter3d(x=polimero[:, 0], y=polimero[:, 1], z=polimero[:, 2], mode='markers+lines',
-                                  marker=dict(size=8, color='blue'), line=dict(color='darkblue', width=4),
-                                  name='Polímero (Ejemplo)')
-    traza_agua = go.Scatter3d(x=aguas[:, 0], y=aguas[:, 1], z=aguas[:, 2], mode='markers',
-                              marker=dict(size=6, color='red'), name='Agua (Ejemplo)')
-    layout = go.Layout(
-        title=f'Cuadro: {cuadro_actual}',
-        scene=dict(xaxis=dict(title='X', range=[-4, 4]), yaxis=dict(title='Y', range=[-4, 4]),
-                   zaxis=dict(title='Z', range=[-4, 4]), aspectmode='cube'),
-        margin=dict(l=0, r=0, b=0, t=40),
-        height=500
-    )
-    fig_3d = go.Figure(data=[traza_polimero, traza_agua], layout=layout)
-    st.plotly_chart(fig_3d, use_container_width=True)
+        with col2:
+            st.markdown("### ℹ️ **Información del Cálculo**")
+            info_data = {
+                "Archivo": st.session_state.nombre_trabajo,
+                "Método": metodo,
+                "Base": conjunto_base,
+                "Tipo": st.session_state.ultimo_tipo_calculo,
+                "Estado": "Convergido ✅" if st.session_state.opt_convergida else "No convergió ❌"
+            }
+
+            for key, value in info_data.items():
+                st.text(f"{key}: {value}")
+
+        # Resumen del log
+        if st.session_state.resumen_log_orca:
+            st.markdown("### 📊 **Resumen Final**")
+            st.code(st.session_state.resumen_log_orca, language='text')
+
+# === FOOTER ===
+st.markdown("---")
+st.markdown("*Desarrollado con Streamlit • Cálculos cuánticos con ORCA*")
