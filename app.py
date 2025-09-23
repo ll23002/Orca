@@ -17,20 +17,17 @@ from utils import (
     verificar_convergencia_optimizacion
 )
 
-# === CONFIGURACIÓN DE PÁGINA ===
 st.set_page_config(
     page_title="ORCA Molecular Calculator",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# === ENCABEZADO PRINCIPAL ===
 col1, col2 = st.columns([3, 1])
 with col1:
     st.title("🧬 ORCA Molecular Calculator")
     st.markdown("*Calculadora cuántica para análisis molecular*")
 
-# === INICIALIZACIÓN DE VARIABLES DE SESIÓN ===
 if "calculo_completado" not in st.session_state:
     st.session_state.calculo_completado = False
 if "opt_convergida" not in st.session_state:
@@ -59,13 +56,10 @@ if "nombre_trabajo" not in st.session_state:
 DIR_CALCULOS = "calculations"
 os.makedirs(DIR_CALCULOS, exist_ok=True)
 
-# === BARRA LATERAL REDISEÑADA ===
 with st.sidebar:
-    # Logo/Header
     st.markdown("### ⚛️ Panel de Control")
     st.markdown("---")
 
-    # Sección 1: Cargar Molécula
     st.markdown("#### 📁 **Molécula de Entrada**")
     archivo_subido = st.file_uploader(
         "Selecciona archivo .xyz",
@@ -80,7 +74,6 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # Sección 2: Tipo de Cálculo
     st.markdown("#### 🧮 **Tipo de Cálculo**")
     tipo_calculo = st.radio(
         "Selecciona el tipo de análisis:",
@@ -89,7 +82,6 @@ with st.sidebar:
         help="Selecciona el tipo de análisis cuántico"
     )
 
-    # Factor de escalamiento solo para IR
     factor_escalamiento = 1.0
     if tipo_calculo == "Frecuencias Vibracionales (IR)":
         st.markdown("##### 📊 Factor de Escalamiento")
@@ -101,7 +93,6 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # Sección 3: Configuración Computacional
     st.markdown("#### ⚙️ **Configuración Computacional**")
 
     col_a, col_b = st.columns(2)
@@ -114,7 +105,6 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # Botón de ejecución más prominente
     st.markdown("#### 🚀 **Ejecutar Cálculo**")
     boton_ejecutar = st.button(
         "🎯 **CALCULAR**",
@@ -123,14 +113,12 @@ with st.sidebar:
         help="Inicia el cálculo cuántico con ORCA"
     )
 
-    # Estado del sistema
     if st.session_state.calculo_completado:
         if st.session_state.opt_convergida:
             st.success("✅ Cálculo completado")
         else:
             st.warning("⚠️ No convergió")
 
-# === LÓGICA DE EJECUCIÓN (SIN CAMBIOS) ===
 if boton_ejecutar:
     if st.session_state.xyz_inicial is None:
         st.sidebar.error("Por favor, carga un archivo .xyz primero.")
@@ -195,9 +183,6 @@ if boton_ejecutar:
 
         st.rerun()
 
-# === CONTENIDO PRINCIPAL REDISEÑADO ===
-
-# Mostrar información básica si hay resultados
 if st.session_state.energia_final is not None:
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -212,15 +197,12 @@ if st.session_state.energia_final is not None:
     with col4:
         st.metric("🧮 Método", f"{metodo}/{conjunto_base}")
 
-# === PESTAÑAS REORGANIZADAS ===
 tabs = st.tabs(["🔬 **Visualización 3D**", "📈 **Espectroscopía**", "⚡ **Análisis Energético**", "🔧 **Datos Técnicos**"])
 
-# === PESTAÑA 1: VISUALIZACIÓN 3D ===
 with tabs[0]:
     if not st.session_state.calculo_completado and st.session_state.xyz_inicial is None:
         st.info("💡 Carga un archivo .xyz en la barra lateral para empezar.")
 
-    # Visualización molecular mejorada
     col1, col2 = st.columns(2)
 
     with col1:
@@ -251,12 +233,10 @@ with tabs[0]:
         else:
             st.info("Ejecuta un cálculo para ver la optimización")
 
-# === PESTAÑA 2: ESPECTROSCOPÍA ===
 with tabs[1]:
     if st.session_state.datos_ir is not None and not st.session_state.datos_ir.empty:
         st.markdown("### 📊 **Espectro Infrarrojo (IR)**")
 
-        # Crear gráfico mejorado
         fig, ax = plt.subplots(figsize=(12, 6))
         ax.stem(st.session_state.datos_ir["Frequency"], st.session_state.datos_ir["Intensity"],
                 basefmt=' ', linefmt='red', markerfmt='ro')
@@ -269,7 +249,6 @@ with tabs[1]:
 
         st.pyplot(fig)
 
-        # Tabla de frecuencias
         st.markdown("#### 📋 **Tabla de Frecuencias**")
         df_display = st.session_state.datos_ir.copy()
         df_display.columns = ['Frecuencia (cm⁻¹)', 'Intensidad (km/mol)']
@@ -283,16 +262,13 @@ with tabs[1]:
     else:
         st.info("💡 Selecciona 'Frecuencias Vibracionales (IR)' para ver el espectro.")
 
-# === PESTAÑA 3: ANÁLISIS ENERGÉTICO ===
 with tabs[2]:
     if not st.session_state.calculo_completado:
         st.info("💡 Ejecuta un cálculo para ver el análisis energético.")
     else:
-        # Componentes de energía
         if st.session_state.datos_energia is not None:
             st.markdown("### ⚡ **Componentes Energéticos**")
 
-            # Visualización mejorada de energías
             df_energia = st.session_state.datos_energia.copy()
             df_energia['Valor (eV)'] = df_energia['Energía (Hartree)'] * 27.2114  # Conversión a eV
 
@@ -304,7 +280,6 @@ with tabs[2]:
                 st.markdown("- **1 Hartree** = 27.21 eV")
                 st.markdown("- **1 Hartree** = 627.5 kcal/mol")
 
-        # Cargas Atómicas
         if st.session_state.datos_cargas:
             st.markdown("---")
             st.markdown("### ⚛️ **Análisis de Cargas Atómicas**")
@@ -320,12 +295,10 @@ with tabs[2]:
                     st.markdown("#### 🟢 **Cargas de Loewdin**")
                     st.dataframe(st.session_state.datos_cargas['Loewdin'], use_container_width=True)
 
-# === PESTAÑA 4: DATOS TÉCNICOS ===
 with tabs[3]:
     if not st.session_state.calculo_completado:
         st.info("💡 Ejecuta un cálculo para ver los datos técnicos.")
     else:
-        # Información técnica y logs
         col1, col2 = st.columns([2, 1])
 
         with col1:
@@ -354,11 +327,10 @@ with tabs[3]:
             for key, value in info_data.items():
                 st.text(f"{key}: {value}")
 
-        # Resumen del log
         if st.session_state.resumen_log_orca:
             st.markdown("### 📊 **Resumen Final**")
             st.code(st.session_state.resumen_log_orca, language='text')
 
-# === FOOTER ===
+# Pie de pagina
 st.markdown("---")
 st.markdown("*Desarrollado con Streamlit • Cálculos cuánticos con ORCA*")
