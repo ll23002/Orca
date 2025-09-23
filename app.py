@@ -1,33 +1,32 @@
 import streamlit as st
 import os
-import subprocess
 import pandas as pd
 import numpy as np
-import plotly.graph_objs as go
 import py3Dmol
 from stmol import showmol
 import matplotlib.pyplot as plt
 from utils import (
-    generar_entrada_orca,
-    extraer_espectro_ir,
+    ejecutar_calculo_pyscf,
     extraer_geometria_optimizada,
     extraer_energia_final,
     extraer_componentes_energia,
     extraer_cargas_atomicas,
-    verificar_convergencia_optimizacion
+    extraer_espectro_ir,
+    parsear_xyz_contenido
 )
 
 st.set_page_config(
-    page_title="ORCA Molecular Calculator",
+    page_title="PySCF Molecular Calculator",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 col1, col2 = st.columns([3, 1])
 with col1:
-    st.title("🧬 ORCA Molecular Calculator")
+    st.title("🧬 PySCF Molecular Calculator")
     st.markdown("*Calculadora cuántica para análisis molecular*")
 
+# Inicializar estados de sesión
 if "calculo_completado" not in st.session_state:
     st.session_state.calculo_completado = False
 if "opt_convergida" not in st.session_state:
@@ -46,12 +45,10 @@ if "datos_cargas" not in st.session_state:
     st.session_state.datos_cargas = None
 if "datos_ir" not in st.session_state:
     st.session_state.datos_ir = None
-if "resumen_log_orca" not in st.session_state:
-    st.session_state.resumen_log_orca = None
-if "log_completo_orca" not in st.session_state:
-    st.session_state.log_completo_orca = None
 if "nombre_trabajo" not in st.session_state:
     st.session_state.nombre_trabajo = ""
+if "resultados_pyscf" not in st.session_state:
+    st.session_state.resultados_pyscf = None
 
 DIR_CALCULOS = "calculations"
 os.makedirs(DIR_CALCULOS, exist_ok=True)
@@ -101,8 +98,6 @@ with st.sidebar:
     with col_b:
         conjunto_base = st.selectbox("Base", ["6-31+G(d,p)", "6-311++G(d,p)", "cc-pVDZ", "def2-SVP"])
 
-    palabras_clave = st.text_input("Palabras clave extra", "D3BJ TIGHTSCF")
-
     st.markdown("---")
 
     st.markdown("#### 🚀 **Ejecutar Cálculo**")
@@ -110,7 +105,7 @@ with st.sidebar:
         "🎯 **CALCULAR**",
         use_container_width=True,
         type="primary",
-        help="Inicia el cálculo cuántico con ORCA"
+        help="Inicia el cálculo cuántico con PySCF"
     )
 
     if st.session_state.calculo_completado:
@@ -123,6 +118,7 @@ if boton_ejecutar:
     if st.session_state.xyz_inicial is None:
         st.sidebar.error("Por favor, carga un archivo .xyz primero.")
     else:
+        # Resetear estados
         st.session_state.calculo_completado = False
         st.session_state.opt_convergida = False
         st.session_state.xyz_optimizada = None
@@ -130,50 +126,46 @@ if boton_ejecutar:
         st.session_state.datos_energia = None
         st.session_state.datos_cargas = None
         st.session_state.datos_ir = None
-        st.session_state.resumen_log_orca = None
-        st.session_state.log_completo_orca = None
+        st.session_state.resultados_pyscf = None
         st.session_state.ultimo_tipo_calculo = tipo_calculo
 
         nombre_trabajo = st.session_state.nombre_trabajo
-        contenido_entrada = generar_entrada_orca(st.session_state.xyz_inicial, tipo_calculo, metodo, conjunto_base,
-                                                 palabras_clave)
-        ruta_entrada = os.path.join(DIR_CALCULOS, f"{nombre_trabajo}.inp")
-        ruta_salida = os.path.join(DIR_CALCULOS, f"{nombre_trabajo}.out")
 
-        with open(ruta_entrada, "w") as f:
-            f.write(contenido_entrada)
-
-        with st.spinner(f"Ejecutando ORCA para '{nombre_trabajo}'... Esto puede tardar varios minutos."):
+        with st.spinner(f"Ejecutando PySCF para '{nombre_trabajo}'... Esto puede tardar varios minutos."):
             try:
-                comando = f"orca {ruta_entrada} > {ruta_salida}"
-                subprocess.run(comando, shell=True, check=True, timeout=600)
-                st.session_state.calculo_completado = True
+                # Parsear la geometría inicial
+                geometria_inicial = parsear_xyz_contenido(st.session_state.xyz_inicial)
 
-            except FileNotFoundError:
-                st.error(
-                    "Error: El ejecutable 'orca' no se encontró. Asegúrate de que ORCA esté instalado y en el PATH del sistema.")
-            except subprocess.CalledProcessError:
-                st.error(f"ORCA devolvió un error. Revisa el archivo de salida para más detalles: {ruta_salida}")
-            except subprocess.TimeoutExpired:
-                st.error("El cálculo de ORCA ha superado el tiempo límite de 10 minutos y ha sido detenido.")
+                # Configurar parámetros del cálculo
+                config_calculo = {
+                    'metodo': metodo,
+                    'base': conjunto_base,
+                    'tipo_calculo': tipo_calculo,
+                    'factor_escalamiento': factor_escalamiento
+                }
+
+                # Ejecutar cálculo con PySCF
+                resultados = ejecutar_calculo_pyscf(geometria_inicial, config_calculo, nombre_trabajo)
+
+                if resultados is not None:
+                    st.session_state.resultados_pyscf = resultados
+                    st.session_state.calculo_completado = True
+                    st.session_state.opt_convergida = resultados.get('convergido', False)
+
+                    # Extraer datos para la interfaz
+                    st.session_state.energia_final = extraer_energia_final(resultados)
+                    st.session_state.xyz_optimizada = extraer_geometria_optimizada(resultados)
+                    st.session_state.datos_energia = extraer_componentes_energia(resultados)
+                    st.session_state.datos_cargas = extraer_cargas_atomicas(resultados)
+
+                    if tipo_calculo == "Frecuencias Vibracionales (IR)":
+                        st.session_state.datos_ir = extraer_espectro_ir(resultados, factor_escalamiento)
+                else:
+                    st.error("Error durante el cálculo con PySCF")
+
             except Exception as e:
-                st.error(f"Ha ocurrido un error inesperado: {e}")
-
-        if os.path.exists(ruta_salida):
-            with open(ruta_salida, 'r') as f:
-                lineas = f.readlines()
-                st.session_state.resumen_log_orca = "".join(lineas[-50:])
-                st.session_state.log_completo_orca = "".join(lineas)
-
-            st.session_state.opt_convergida = verificar_convergencia_optimizacion(ruta_salida)
-            st.session_state.xyz_optimizada = extraer_geometria_optimizada(ruta_salida)
-            st.session_state.energia_final = extraer_energia_final(ruta_salida)
-            st.session_state.datos_energia = extraer_componentes_energia(ruta_salida)
-            st.session_state.datos_cargas = extraer_cargas_atomicas(ruta_salida)
-            if tipo_calculo == "Frecuencias Vibracionales (IR)":
-                st.session_state.datos_ir = extraer_espectro_ir(ruta_salida, factor_escalamiento)
-        else:
-            st.session_state.resumen_log_orca = "El archivo de salida no fue creado."
+                st.error(f"Ha ocurrido un error durante el cálculo: {str(e)}")
+                st.exception(e)
 
         if st.session_state.calculo_completado:
             if st.session_state.opt_convergida:
@@ -183,6 +175,7 @@ if boton_ejecutar:
 
         st.rerun()
 
+# Métricas principales
 if st.session_state.energia_final is not None:
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -197,6 +190,7 @@ if st.session_state.energia_final is not None:
     with col4:
         st.metric("🧮 Método", f"{metodo}/{conjunto_base}")
 
+# Pestañas principales
 tabs = st.tabs(["🔬 **Visualización 3D**", "📈 **Espectroscopía**", "⚡ **Análisis Energético**", "🔧 **Datos Técnicos**"])
 
 with tabs[0]:
@@ -302,17 +296,29 @@ with tabs[3]:
         col1, col2 = st.columns([2, 1])
 
         with col1:
-            st.markdown("### 📋 **Log de ORCA**")
-            if st.session_state.log_completo_orca:
-                with st.expander("📄 Ver log completo", expanded=False):
-                    st.code(st.session_state.log_completo_orca, language='text')
+            st.markdown("### 📋 **Información del Cálculo PySCF**")
+            if st.session_state.resultados_pyscf:
+                info_texto = f"""
+**Energía SCF:** {st.session_state.resultados_pyscf.get('energia_scf', 'N/A'):.6f} Hartree
+**Convergencia SCF:** {'✅ Sí' if st.session_state.resultados_pyscf.get('convergencia_scf', False) else '❌ No'}
+**Iteraciones SCF:** {st.session_state.resultados_pyscf.get('iteraciones_scf', 'N/A')}
+"""
+                if 'dipole_moment' in st.session_state.resultados_pyscf:
+                    dipole = st.session_state.resultados_pyscf['dipole_moment']
+                    dipole_mag = np.linalg.norm(dipole)
+                    info_texto += f"**Momento Dipolar:** {dipole_mag:.4f} Debye\n"
 
-                st.download_button(
-                    label="💾 Descargar archivo .out",
-                    data=st.session_state.log_completo_orca,
-                    file_name=f"{st.session_state.nombre_trabajo}.out",
-                    mime="text/plain"
-                )
+                st.markdown(info_texto)
+
+                # Botón para descargar datos
+                if st.session_state.resultados_pyscf:
+                    datos_exportar = str(st.session_state.resultados_pyscf)
+                    st.download_button(
+                        label="💾 Descargar resultados",
+                        data=datos_exportar,
+                        file_name=f"{st.session_state.nombre_trabajo}_pyscf.txt",
+                        mime="text/plain"
+                    )
 
         with col2:
             st.markdown("### ℹ️ **Información del Cálculo**")
@@ -320,6 +326,7 @@ with tabs[3]:
                 "Archivo": st.session_state.nombre_trabajo,
                 "Método": metodo,
                 "Base": conjunto_base,
+                "Motor": "PySCF",
                 "Tipo": st.session_state.ultimo_tipo_calculo,
                 "Estado": "Convergido ✅" if st.session_state.opt_convergida else "No convergió ❌"
             }
@@ -327,10 +334,6 @@ with tabs[3]:
             for key, value in info_data.items():
                 st.text(f"{key}: {value}")
 
-        if st.session_state.resumen_log_orca:
-            st.markdown("### 📊 **Resumen Final**")
-            st.code(st.session_state.resumen_log_orca, language='text')
-
-# Pie de pagina
+# Pie de página
 st.markdown("---")
-st.markdown("*Desarrollado con Streamlit • Cálculos cuánticos con ORCA*")
+st.markdown("*Desarrollado con Streamlit • Cálculos cuánticos con PySCF*")
