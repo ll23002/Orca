@@ -107,6 +107,83 @@ def calcular_frecuencias_ir(mol_opt, metodo_obj):
         return None
 
 
+def calcular_componentes_energeticos(mol, metodo_obj):
+    """
+    Calcula todos los componentes energéticos incluyendo One Electron, Two Electron y Kinetic Energy
+    """
+    try:
+        # Obtener la matriz de densidad
+        dm = metodo_obj.make_rdm1()
+
+        # Integrales de un electrón
+        h1e = metodo_obj.get_hcore()  # Hamiltoniano de core (cinético + potencial nuclear)
+
+        # Integrales cinéticas y de potencial nuclear por separado
+        t = mol.intor('int1e_kin')  # Energía cinética
+        v = mol.intor('int1e_nuc')  # Potencial núcleo-electrón
+
+        # Energía de un electrón
+        energia_un_electron = np.trace(np.dot(dm, h1e))
+
+        # Energía cinética
+        energia_cinetica = np.trace(np.dot(dm, t))
+
+        # Energía potencial núcleo-electrón
+        energia_potencial_nuclear = np.trace(np.dot(dm, v))
+
+        # Energía de dos electrones (repulsión electrón-electrón)
+        vhf = metodo_obj.get_veff()  # Potencial de Hartree-Fock/DFT
+        j = metodo_obj.get_j()  # Integral de Coulomb
+
+        # Para DFT, la energía de dos electrones incluye intercambio-correlación
+        if hasattr(metodo_obj, 'get_veff'):
+            # Energía electrón-electrón total (incluye XC para DFT)
+            energia_dos_electrones = 0.5 * np.trace(np.dot(dm, vhf - h1e))
+        else:
+            # Para métodos HF puros
+            energia_dos_electrones = 0.5 * np.trace(np.dot(dm, j))
+
+        # Repulsión nuclear
+        energia_repulsion_nuclear = mol.energy_nuc()
+
+        # Energía electrónica total
+        energia_electronica = energia_un_electron + energia_dos_electrones
+
+        # Energía total
+        energia_total = energia_electronica + energia_repulsion_nuclear
+
+        componentes = {
+            'Energía Total': energia_total,
+            'Energía Electrónica': energia_electronica,
+            'Energía Un Electrón': energia_un_electron,
+            'Energía Dos Electrones': energia_dos_electrones,
+            'Energía Cinética': energia_cinetica,
+            'Potencial Núcleo-Electrón': energia_potencial_nuclear,
+            'Repulsión Nuclear': energia_repulsion_nuclear
+        }
+
+        # Agregar información sobre orbitales si están disponibles
+        if hasattr(metodo_obj, 'mo_energy') and metodo_obj.mo_energy is not None:
+            # HOMO y LUMO
+            mo_occ = metodo_obj.mo_occ
+            mo_energy = metodo_obj.mo_energy
+
+            if np.any(mo_occ > 0):
+                homo_energy = mo_energy[mo_occ > 0][-1]
+                componentes['Energía HOMO'] = homo_energy
+
+            if np.any(mo_occ == 0):
+                lumo_energy = mo_energy[mo_occ == 0][0]
+                componentes['Energía LUMO'] = lumo_energy
+                componentes['Gap HOMO-LUMO'] = lumo_energy - homo_energy
+
+        return componentes
+
+    except Exception as e:
+        print(f"Error calculando componentes energéticos: {e}")
+        return None
+
+
 def ejecutar_calculo_pyscf(geometria, config, nombre_trabajo):
     if not PYSCF_DISPONIBLE:
         raise ImportError("PySCF no está disponible. Instala con: pip install pyscf")
@@ -128,6 +205,11 @@ def ejecutar_calculo_pyscf(geometria, config, nombre_trabajo):
             'metodo_obj': metodo_obj
         }
 
+        # Calcular componentes energéticos detallados
+        componentes_energia = calcular_componentes_energeticos(mol, metodo_obj)
+        if componentes_energia:
+            resultados['componentes_energia'] = componentes_energia
+
         try:
             resultados['dipole_moment'] = metodo_obj.dip_moment()
             resultados['mulliken_charges'] = metodo_obj.mulliken_charges()
@@ -139,6 +221,15 @@ def ejecutar_calculo_pyscf(geometria, config, nombre_trabajo):
             resultado_opt = ejecutar_optimizacion_geometria(mol, metodo_obj)
             resultados.update(resultado_opt)
 
+            # Recalcular componentes energéticos para la geometría optimizada
+            if 'metodo_final' in resultado_opt:
+                componentes_opt = calcular_componentes_energeticos(
+                    resultado_opt['mol_optimizada'],
+                    resultado_opt['metodo_final']
+                )
+                if componentes_opt:
+                    resultados['componentes_energia_optimizada'] = componentes_opt
+
             if config['tipo_calculo'] == "Frecuencias Vibracionales (IR)" and resultado_opt.get('convergido', False):
                 freq_data = calcular_frecuencias_ir(
                     resultado_opt['mol_optimizada'], resultado_opt['metodo_final']
@@ -149,17 +240,10 @@ def ejecutar_calculo_pyscf(geometria, config, nombre_trabajo):
         resultados['calculo_completado'] = True
         resultados['convergido'] = resultados.get('convergido', metodo_obj.converged)
 
+        # Guardar reporte detallado
         ruta_resultados = os.path.join("calculations", f"{nombre_trabajo}_pyscf.txt")
         with open(ruta_resultados, 'w') as f:
-            f.write(f"Resultados PySCF para {nombre_trabajo}\n")
-            f.write("=" * 50 + "\n")
-            f.write(f"Método: {config['metodo']}\n")
-            f.write(f"Base: {config['base']}\n")
-            f.write(f"Energía SCF: {energia_scf:.8f} Hartree\n")
-            f.write(f"Convergencia: {metodo_obj.converged}\n")
-            if 'dipole_moment' in resultados:
-                dipole_mag = np.linalg.norm(resultados['dipole_moment'])
-                f.write(f"Momento dipolar: {dipole_mag:.4f} Debye\n")
+            f.write(generar_reporte_completo(resultados, nombre_trabajo))
 
         return resultados
 
@@ -191,8 +275,27 @@ def extraer_geometria_optimizada(resultados):
 
 
 def extraer_componentes_energia(resultados):
-    if resultados is None: return None
+    if resultados is None:
+        return None
+
     try:
+        # Priorizar componentes de geometría optimizada si están disponibles
+        componentes_data = resultados.get('componentes_energia_optimizada',
+                                          resultados.get('componentes_energia'))
+
+        if componentes_data:
+            # Convertir a DataFrame con formato apropiado
+            componentes_df = {}
+            for nombre, valor in componentes_data.items():
+                if isinstance(valor, (int, float)):
+                    componentes_df[nombre] = [float(valor)]
+                else:
+                    componentes_df[nombre] = [float(valor)]
+
+            df = pd.DataFrame.from_dict(componentes_df, orient='index', columns=['Energía (Hartree)'])
+            return df
+
+        # Fallback a método anterior si no hay componentes detallados
         componentes = {}
         if 'energia_scf' in resultados:
             componentes['Energía SCF'] = [resultados['energia_scf']]
@@ -211,6 +314,7 @@ def extraer_componentes_energia(resultados):
         if componentes:
             return pd.DataFrame.from_dict(componentes, orient='index', columns=['Energía (Hartree)'])
         return None
+
     except Exception as e:
         print(f"Error extrayendo componentes energéticos: {e}")
         return None
@@ -263,14 +367,15 @@ def verificar_convergencia_optimizacion(resultados):
     if resultados is None: return False
     return resultados.get('convergido', False)
 
-def generar_reporte_pyscf(resultados, nombre_trabajo):
+
+def generar_reporte_completo(resultados, nombre_trabajo):
     if resultados is None:
         return "No hay resultados disponibles."
 
     reporte = []
-    reporte.append("=" * 60)
-    reporte.append(f"REPORTE DE CÁLCULO PYSCF: {nombre_trabajo}")
-    reporte.append("=" * 60)
+    reporte.append("=" * 70)
+    reporte.append(f"REPORTE DETALLADO DE CÁLCULO PYSCF: {nombre_trabajo}")
+    reporte.append("=" * 70)
     reporte.append("")
 
     # Información general
@@ -282,6 +387,19 @@ def generar_reporte_pyscf(resultados, nombre_trabajo):
     reporte.append(f"Convergencia SCF: {'Sí' if resultados.get('convergencia_scf', False) else 'No'}")
     reporte.append(f"Iteraciones SCF: {resultados.get('iteraciones_scf', 'N/A')}")
     reporte.append("")
+
+    # Componentes energéticos detallados
+    componentes_data = resultados.get('componentes_energia_optimizada',
+                                      resultados.get('componentes_energia'))
+    if componentes_data:
+        reporte.append("ANÁLISIS ENERGÉTICO DETALLADO:")
+        reporte.append("-" * 35)
+        for nombre, valor in componentes_data.items():
+            if isinstance(valor, (int, float)):
+                reporte.append(f"{nombre:<25}: {valor:>15.8f} Hartree")
+                if nombre in ['Energía HOMO', 'Energía LUMO']:
+                    reporte.append(f"{' ' * 25}  {valor * 27.2114:>15.4f} eV")
+        reporte.append("")
 
     # Información de optimización
     if 'energia_final' in resultados:
@@ -311,8 +429,8 @@ def generar_reporte_pyscf(resultados, nombre_trabajo):
         reporte.append(f"Modos reales: {n_freq_positivas}")
         reporte.append("")
 
-    reporte.append("=" * 60)
+    reporte.append("=" * 70)
     reporte.append("Cálculo completado con PySCF")
-    reporte.append("=" * 60)
+    reporte.append("=" * 70)
 
     return "\n".join(reporte)
