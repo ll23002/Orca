@@ -1,3 +1,4 @@
+# codigo
 import streamlit as st
 import os
 import subprocess
@@ -149,7 +150,8 @@ if boton_ejecutar:
 
         with st.spinner(f"Ejecutando ORCA para '{nombre_trabajo}'... Esto puede tardar varios minutos."):
             try:
-                comando = f"orca {ruta_entrada} > {ruta_salida}"
+                comando = f"orca {ruta_entrada} > {ruta_salida}" # windows
+                #comando = f"orca {ruta_entrada} | {ruta_salida}" # linux
                 subprocess.run(comando, shell=True, check=True, timeout=600)
                 st.session_state.calculo_completado = True
             except Exception as e:
