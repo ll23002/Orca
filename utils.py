@@ -1,201 +1,174 @@
-# segundo intento
 import pandas as pd
-import re
+from pathlib import Path
+import shutil
+import json
 
-def generar_entrada_orca(contenido_xyz, tipo_calculo, metodo, base, palabras_clave):
-    """Genera el contenido del archivo de entrada para ORCA."""
-    palabras_base = f"! {metodo} {base} {palabras_clave}"
+# Importaciones correctas de la biblioteca OPI
+from opi.core import Calculator
+from opi.input.structures.structure import Structure
 
+
+def ejecutar_y_procesar_orca(nombre_trabajo, contenido_xyz, tipo_calculo, metodo, base, palabras_clave_extra,
+                             dir_calculos, factor_escalamiento=1.0):
+    """
+    Ejecuta un cálculo de ORCA y procesa la salida utilizando la biblioteca OPI,
+    con una verificación de convergencia robusta y un parseo directo del JSON de resultados.
+    """
+    # 1. Configurar directorios y rutas
+    working_dir = Path(dir_calculos) / nombre_trabajo
+    if working_dir.exists():
+        shutil.rmtree(working_dir)
+    working_dir.mkdir(parents=True, exist_ok=True)
+    ruta_salida = working_dir / f"{nombre_trabajo}.out"
+    ruta_prop_json = working_dir / f"{nombre_trabajo}.property.json"
+
+    # 2. Configurar la calculadora
+    calc = Calculator(
+        basename=nombre_trabajo,
+        working_dir=working_dir,
+    )
+
+    # 3. Cargar la estructura
+    ruta_xyz_entrada = working_dir / f"{nombre_trabajo}_input.xyz"
+    with open(ruta_xyz_entrada, "w") as f:
+        f.write(contenido_xyz)
+    calc.structure = Structure.from_xyz(ruta_xyz_entrada)
+
+    # 4. Añadir palabras clave
+    input_keywords = [metodo, base] + palabras_clave_extra.split()
     if tipo_calculo == "Optimización de Geometría":
-        palabras_calculo = "OPT"
+        input_keywords.append("OPT")
     elif tipo_calculo == "Frecuencias Vibracionales (IR)":
-        palabras_calculo = "OPT FREQ"
-    else:
-        palabras_calculo = ""
+        input_keywords.append("OPT")
+        input_keywords.append("FREQ")
+    calc.input.add_simple_keywords(*input_keywords)
 
-    encabezado = f"{palabras_base} {palabras_calculo}\n"
-    lineas = contenido_xyz.strip().split('\n')
-    lineas_coords = lineas[2:]
-    coords_str = "\n".join(lineas_coords)
-    bloque_xyz = f"* xyz 0 1\n{coords_str}\n*\n"
-    return encabezado + bloque_xyz
-
-def extraer_geometria_optimizada(ruta_salida):
-    """Extrae las coordenadas XYZ optimizadas del archivo de salida de ORCA."""
+    # 5. Escribir el input y ejecutar ORCA
     try:
-        with open(ruta_salida, 'r', encoding='utf-8', errors='ignore') as f:
-            contenido = f.read()
-    except FileNotFoundError: return None
+        calc.write_input()
+        calc.run()
+    except Exception as e:
+        log_content = ""
+        if ruta_salida.exists():
+            with open(ruta_salida, 'r', encoding='utf-8', errors='ignore') as f:
+                log_content = f.read()
+        return {"error": f"Se produjo una excepción durante la ejecución de ORCA: {e}",
+                "log_completo_orca": log_content}
 
-    patron = r'CARTESIAN COORDINATES \(ANGSTROEM\)\s*\n\s*-+\s*\n((?:\s*\S+\s+[-\d.]+\s+[-\d.]+\s+[-\d.]+\s*\n)+)'
-    coincidencias = list(re.finditer(patron, contenido))
-    if not coincidencias: return None
+    # 6. Obtener y procesar los resultados
+    output = calc.get_output()
+    if not output.terminated_normally():
+        log_content = ""
+        if ruta_salida.exists():
+            with open(ruta_salida, 'r', encoding='utf-8', errors='ignore') as f:
+                log_content = f.read()
+        return {"error": "ORCA no terminó normalmente. Revisa el log.", "log_completo_orca": log_content}
 
-    bloque_coords = coincidencias[-1].group(1).strip()
-    lineas_coords = [linea.strip() for linea in bloque_coords.split('\n') if linea.strip()]
-    if not lineas_coords: return None
+    # Generar el JSON de propiedades
+    output.create_property_json()
 
-    num_atomos = len(lineas_coords)
-    bloque_xyz = f"{num_atomos}\nGeometría Optimizada\n"
-    for linea in lineas_coords:
-        partes = linea.split()
-        if len(partes) >= 4:
-            bloque_xyz += f"{partes[0]:<2} {float(partes[1]):>12.6f} {float(partes[2]):>12.6f} {float(partes[3]):>12.6f}\n"
-    return bloque_xyz
-
-def extraer_espectro_ir(ruta_salida, factor_escalamiento=1.0):
-    """
-    Extrae los datos del espectro IR y aplica un factor de escalamiento.
-    Esta versión es más robusta para manejar diferentes formatos de cabecera en el archivo de salida de ORCA.
-    """
-    try:
-        with open(ruta_salida, 'r', encoding='utf-8', errors='ignore') as f:
-            contenido = f.read()
-    except FileNotFoundError:
-        return pd.DataFrame()
-
-    # Patrón robusto para encontrar el bloque de datos del espectro IR.
-    # Busca "IR SPECTRUM", salta cualquier línea de cabecera y el separador '---',
-    # y luego captura todas las líneas de datos hasta encontrar una línea que empieza con '*' o una sección nueva.
-    patron_ir_bloque = r'IR SPECTRUM\s*\n-+\n(?:.|\n)*?-+\n((?:.|\n)*?)(?=\n\s*\*|\n\s*-{2,}\n[A-Z]|\Z)'
-    coincidencia = re.search(patron_ir_bloque, contenido)
-
-    if not coincidencia:
-        return pd.DataFrame()
-
-    datos = []
-    bloque_datos = coincidencia.group(1).strip()
-
-    for linea in bloque_datos.split('\n'):
-        partes = linea.split()
-        # Una línea de datos válida tiene un formato como "6: 1602.68 ..."
-        if len(partes) > 3 and partes[0].endswith(':'):
-            try:
-                # La frecuencia es la segunda columna (índice 1)
-                freq = float(partes[1])
-                # La intensidad es la cuarta columna (índice 3)
-                intensidad = float(partes[3])
-
-                # Ignorar modos de traslación/rotación que tienen frecuencia ~0
-                if freq > 10.0:
-                    datos.append({"Frequency": freq * factor_escalamiento, "Intensity": intensidad})
-            except (ValueError, IndexError):
-                # Ignorar líneas que no se pueden procesar
-                continue
-
-    return pd.DataFrame(datos)
-
-def extraer_energia_final(ruta_salida):
-    """Extrae la energía final (Single Point Energy) del archivo de salida."""
-    try:
-        with open(ruta_salida, 'r', encoding='utf-8', errors='ignore') as f:
-            contenido = f.read()
-    except FileNotFoundError: return None
-
-    coincidencias = re.findall(r'FINAL SINGLE POINT ENERGY\s+([-\d.]+)', contenido)
-    if coincidencias: return float(coincidencias[-1])
-    return None
-
-def extraer_componentes_energia(ruta_salida):
-    """Extrae el desglose de componentes energéticos."""
-    try:
-        with open(ruta_salida, 'r', encoding='utf-8', errors='ignore') as f:
-            contenido = f.read()
-    except FileNotFoundError: return None
-
-    patrones = {
-        "Repulsión Nuclear": r'Nuclear Repulsion\s+:\s*([-\d.]+)',
-        "Energía Electrónica": r'Electronic Energy\s+:\s*([-\d.]+)',
-        "Energía Un Electrón": r'One Electron Energy\s+:\s*([-\d.]+)',
-        "Energía Dos Electrones": r'Two Electron Energy\s+:\s*([-\d.]+)',
-        "Energía Cinética": r'Kinetic Energy\s+:\s*([-\d.]+)',
-        "Energía Potencial": r'Potential Energy\s+:\s*([-\d.]+)'
+    resultados = {
+        "opt_convergida": False, "xyz_optimizada": None, "energia_final": None,
+        "datos_ir": None, "datos_cargas": None, "datos_orbitales": None,
+        "log_completo_orca": "", "error": None
     }
-    energias = {}
-    for nombre, patron in patrones.items():
-        coincidencias = re.findall(patron, contenido)
-        if coincidencias: energias[nombre] = [float(coincidencias[-1])]
 
-    return pd.DataFrame.from_dict(energias, orient='index', columns=['Energía (Hartree)']) if energias else None
+    # Leer el log completo para la pestaña de "Datos Técnicos" y para la verificación
+    with open(ruta_salida, 'r', encoding='utf-8', errors='ignore') as f:
+        log_completo = f.read()
+        resultados["log_completo_orca"] = log_completo
 
-def extraer_cargas_atomicas(ruta_salida):
-    """Extrae las cargas atómicas de Mulliken y Loewdin."""
-    try:
-        with open(ruta_salida, 'r', encoding='utf-8', errors='ignore') as f:
-            contenido = f.read()
-    except FileNotFoundError: return None
+    # --- MÉTODO DE VERIFICACIÓN HÍBRIDO Y ROBUSTO ---
 
-    datos_cargas = {}
-    for tipo in ['MULLIKEN', 'LOEWDIN']:
-        patron = re.compile(rf'{tipo} ATOMIC CHARGES\s*\n-+\n((?:.|\n)*?)(?=\n\n|\Z)')
-        coincidencia = re.search(patron, contenido)
-        if coincidencia:
-            cargas = []
-            for linea in coincidencia.group(1).strip().split('\n'):
-                partes = linea.split()
-                if len(partes) == 4 and partes[0].endswith(':'):
-                    cargas.append({"Átomo": f"{partes[0][:-1]} {partes[1]}", "Carga": float(partes[3])})
-            datos_cargas[tipo.capitalize()] = pd.DataFrame(cargas)
+    # 1. Verificar la convergencia directamente desde el log de ORCA
+    if "THE OPTIMIZATION HAS CONVERGED" in log_completo:
+        resultados["opt_convergida"] = True
 
-    return datos_cargas if datos_cargas else None
+    # 2. Leer el JSON de propiedades manualmente para extraer los datos
+    if ruta_prop_json.exists():
+        with open(ruta_prop_json, 'r') as f:
+            props = json.load(f)
 
-def verificar_convergencia_optimizacion(ruta_salida):
-    """Verifica si la optimización de la geometría ha convergido."""
-    try:
-        with open(ruta_salida, 'r', encoding='utf-8', errors='ignore') as f:
-            contenido = f.read()
-    except FileNotFoundError: return False
-    return "THE OPTIMIZATION HAS CONVERGED" in contenido
+        # La mayoría de los datos finales están en el último paso de la optimización
+        if props and "Geometries" in props and props["Geometries"]:
+            final_step = props["Geometries"][-1]
 
-def extraer_energias_orbitales(ruta_salida):
-    """Extrae las energías de los orbitales."""
-    try:
-        with open(ruta_salida, 'r', encoding='utf-8', errors='ignore') as f:
-            contenido = f.read()
-    except FileNotFoundError: return None
+            # Extraer energía final
+            if "Energy" in final_step and final_step["Energy"]:
+                resultados["energia_final"] = final_step["Energy"][0]["totalEnergy"][0][0]
 
-    patron = re.compile(r'ORBITAL ENERGIES\s*\n-+\n((?:.|\n)*?)(?=\n\n|\Z)')
-    coincidencia = re.search(patron, contenido)
-    if not coincidencia: return None
+            # Extraer geometría optimizada del JSON
+            if "Geometry" in final_step and "Coordinates" in final_step["Geometry"]:
+                coords = final_step["Geometry"]["Coordinates"]
+                if "Cartesians" in coords:
+                    cartesians = coords["Cartesians"]
+                    n_atoms = len(cartesians)
 
-    orbitales = []
-    for linea in coincidencia.group(1).strip().split('\n')[2:]:  # Omitir cabeceras
-        partes = linea.split()
-        if len(partes) == 4:
-            orbitales.append({
-                "Número": int(partes[0]),
-                "Ocupación": float(partes[1]),
-                "Energía (Eh)": float(partes[2]),
-                "Energía (eV)": float(partes[3])
-            })
-    return pd.DataFrame(orbitales)
+                    # Construir el formato XYZ
+                    xyz_lines = [str(n_atoms), "Optimized geometry from ORCA"]
 
-def extraer_cargas_orbitales_reducidas(ruta_salida):
-    """Extrae las cargas orbitales reducidas de Mulliken y Loewdin."""
-    try:
-        with open(ruta_salida, 'r', encoding='utf-8', errors='ignore') as f:
-            contenido = f.read()
-    except FileNotFoundError: return None
+                    for atom_data in cartesians:
+                        element = atom_data[0]
+                        x, y, z = atom_data[1], atom_data[2], atom_data[3]
+                        # Convertir de bohr a angstrom (1 bohr = 0.529177 angstrom)
+                        x_ang = x * 0.529177249
+                        y_ang = y * 0.529177249
+                        z_ang = z * 0.529177249
+                        xyz_lines.append(f"{element:2s} {x_ang:15.10f} {y_ang:15.10f} {z_ang:15.10f}")
 
-    datos_cargas = {}
-    for tipo in ['MULLIKEN', 'LOEWDIN']:
-        patron = re.compile(rf'{tipo} REDUCED ORBITAL CHARGES\s*\n-+\n((?:.|\n)*?)(?=\n\n|\Z)')
-        coincidencia = re.search(patron, contenido)
-        if coincidencia:
-            cargas_orbitales = []
-            atomo_actual = ""
-            for linea in coincidencia.group(1).strip().split('\n'):
-                if ":" in linea and not linea.strip().startswith(('s ', 'p ', 'd ')):
-                    atomo_actual = linea.split(':')[0].strip()
-                elif any(orb in linea for orb in ["s       :", "p       :", "d       :"]):
-                    partes = [p for p in linea.split() if p != ':']
-                    if len(partes) >= 3:
-                        cargas_orbitales.append({
-                            "Átomo": atomo_actual,
-                            "Orbital": partes[0],
-                            "Carga": float(partes[1])
-                        })
-            datos_cargas[tipo.capitalize()] = pd.DataFrame(cargas_orbitales)
+                    resultados["xyz_optimizada"] = "\n".join(xyz_lines)
 
-    return datos_cargas if datos_cargas else None
+            # Extraer cargas de Mulliken
+            if "Mulliken_Population_Analysis" in final_step:
+                cargas = {}
+                mulliken_data = final_step["Mulliken_Population_Analysis"][0]
 
+                # Obtener los símbolos de los átomos de la geometría
+                atom_symbols = []
+                if "Geometry" in final_step and "Coordinates" in final_step["Geometry"]:
+                    cartesians = final_step["Geometry"]["Coordinates"]["Cartesians"]
+                    atom_symbols = [atom[0] for atom in cartesians]
+
+                cargas['Mulliken'] = pd.DataFrame({
+                    "Átomo": [f'{symbol}{i + 1}' for i, symbol in enumerate(atom_symbols)] if atom_symbols else [
+                        f'Atom {i + 1}' for i in range(len(mulliken_data["AtomicCharges"]))],
+                    "Carga": [c[0] for c in mulliken_data["AtomicCharges"]]
+                })
+                resultados["datos_cargas"] = cargas
+
+            # Extraer cargas de Loewdin
+            if "Loewdin_Population_Analysis" in final_step:
+                cargas = resultados.get("datos_cargas", {})
+                loewdin_data = final_step["Loewdin_Population_Analysis"][0]
+
+                # Obtener los símbolos de los átomos de la geometría
+                atom_symbols = []
+                if "Geometry" in final_step and "Coordinates" in final_step["Geometry"]:
+                    cartesians = final_step["Geometry"]["Coordinates"]["Cartesians"]
+                    atom_symbols = [atom[0] for atom in cartesians]
+
+                cargas['Loewdin'] = pd.DataFrame({
+                    "Átomo": [f'{symbol}{i + 1}' for i, symbol in enumerate(atom_symbols)] if atom_symbols else [
+                        f'Atom {i + 1}' for i in range(len(loewdin_data["AtomicCharges"]))],
+                    "Carga": [c[0] for c in loewdin_data["AtomicCharges"]]
+                })
+                resultados["datos_cargas"] = cargas
+
+    # Si por alguna razón el JSON no funcionó, intentar con OPI como respaldo
+    if not resultados["xyz_optimizada"]:
+        try:
+            if hasattr(output, 'structures') and hasattr(output.structures,
+                                                         'optimized') and output.structures.optimized:
+                resultados["xyz_optimizada"] = output.structures.optimized.to_xyz()
+        except Exception as e:
+            print(f"Warning: No se pudo extraer geometría con OPI: {e}")
+
+    # Verificar que se extrajo la energía desde el JSON, si no, intentar con OPI
+    if not resultados["energia_final"]:
+        try:
+            if hasattr(output, 'final_energy') and output.final_energy:
+                resultados["energia_final"] = output.final_energy
+        except Exception as e:
+            print(f"Warning: No se pudo extraer energía con OPI: {e}")
+
+    return resultados
