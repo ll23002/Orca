@@ -1,23 +1,14 @@
+# app.py
 import streamlit as st
 import os
 import subprocess
 import pandas as pd
-import numpy as np
-import plotly.graph_objs as go
 import py3Dmol
 from stmol import showmol
 import matplotlib.pyplot as plt
-from utils import (
-    generar_entrada_orca,
-    extraer_espectro_ir,
-    extraer_geometria_optimizada,
-    extraer_energia_final,
-    extraer_componentes_energia,
-    extraer_cargas_atomicas,
-    verificar_convergencia_optimizacion,
-    extraer_energias_orbitales,
-    extraer_cargas_orbitales_reducidas
-)
+
+# --- CAMBIO 1: Importar la clase OrcaParser desde utils.py ---
+from utils import OrcaParser
 
 # --- Configuración de la Página ---
 st.set_page_config(
@@ -32,7 +23,7 @@ with col1:
     st.title("🧬 ORCA Molecular Calculator")
     st.markdown("*Calculadora cuántica para análisis molecular*")
 
-# --- Inicialización del Estado de la Sesión ---
+# --- Inicialización del Estado de la Sesión (sin cambios) ---
 if "calculo_completado" not in st.session_state:
     st.session_state.calculo_completado = False
 if "opt_convergida" not in st.session_state:
@@ -65,6 +56,7 @@ if "nombre_trabajo" not in st.session_state:
 DIR_CALCULOS = "calculations"
 os.makedirs(DIR_CALCULOS, exist_ok=True)
 
+# --- Panel Lateral (Sidebar - sin cambios) ---
 with st.sidebar:
     st.markdown("### ⚛️ Panel de Control")
     st.markdown("---")
@@ -108,7 +100,7 @@ with st.sidebar:
         with col_a:
             metodo = st.selectbox("Método", ["B3LYP", "PBE0", "M06-2X", "wB97X-D"])
         with col_b:
-            conjunto_base = st.selectbox("Base", ["6-31+G(d,p)", "6-311++G(d,p)", "cc-pVDZ", "def2-SVP"])
+            conjunto_base = st.selectbox("Base", ["def2-SVP", "6-31+G(d,p)", "6-311++G(d,p)", "cc-pVDZ"])
 
         palabras_clave = st.text_input("Palabras clave extra", "D3BJ TIGHTSCF")
 
@@ -128,52 +120,83 @@ with st.sidebar:
         else:
             st.warning("⚠️ No convergió")
 
+# --- Lógica del Botón de Cálculo ---
 if boton_ejecutar:
     if st.session_state.xyz_inicial is None:
         st.sidebar.error("Por favor, carga un archivo .xyz primero.")
     else:
+        # Resetea el estado de la sesión para el nuevo cálculo
         for key in st.session_state.keys():
-            if key not in ['xyz_inicial', 'nombre_trabajo', 'frames']:
+            if key not in ['xyz_inicial', 'nombre_trabajo']:
                 st.session_state[key] = None if not isinstance(st.session_state[key], bool) else False
 
         st.session_state.ultimo_tipo_calculo = tipo_calculo
-
         nombre_trabajo = st.session_state.nombre_trabajo
-        contenido_entrada = generar_entrada_orca(st.session_state.xyz_inicial, tipo_calculo, metodo, conjunto_base,
-                                                 palabras_clave)
+
+        # --- CAMBIO 2: Llamar al método estático de la clase ---
+        contenido_entrada = OrcaParser.generar_entrada_orca(
+            st.session_state.xyz_inicial, tipo_calculo, metodo, conjunto_base, palabras_clave
+        )
         ruta_entrada = os.path.join(DIR_CALCULOS, f"{nombre_trabajo}.inp")
         ruta_salida = os.path.join(DIR_CALCULOS, f"{nombre_trabajo}.out")
 
         with open(ruta_entrada, "w") as f:
             f.write(contenido_entrada)
 
+        # Ejecutar el cálculo de ORCA
         with st.spinner(f"Ejecutando ORCA para '{nombre_trabajo}'... Esto puede tardar varios minutos."):
             try:
-                comando = f"orca {ruta_entrada} > {ruta_salida}"
-                subprocess.run(comando, shell=True, check=True, timeout=600)
+                comando = f"orca {ruta_entrada}"
+                # Usamos Popen para manejar mejor la salida en tiempo real si fuera necesario
+                proceso = subprocess.run(
+                    comando,
+                    shell=True,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=600 # Timeout de 10 minutos
+                )
+                with open(ruta_salida, "w") as f_out:
+                    f_out.write(proceso.stdout)
+                    f_out.write(proceso.stderr)
+
                 st.session_state.calculo_completado = True
+            except subprocess.TimeoutExpired:
+                st.error("El cálculo de ORCA tardó demasiado (más de 10 minutos) y fue cancelado.")
+            except subprocess.CalledProcessError as e:
+                st.error("Error al ejecutar ORCA. Revisa los parámetros y el log.")
+                st.code(e.stderr)
             except Exception as e:
-                st.error(f"Error al ejecutar ORCA: {e}")
+                st.error(f"Error inesperado: {e}")
 
+        # --- CAMBIO 3: Usar la clase OrcaParser para analizar el resultado ---
         if os.path.exists(ruta_salida):
-            with open(ruta_salida, 'r', encoding='utf-8', errors='ignore') as f:
-                lineas = f.readlines()
-                st.session_state.resumen_log_orca = "".join(lineas[-50:])
-                st.session_state.log_completo_orca = "".join(lineas)
+            try:
+                # Instanciar el analizador UNA SOLA VEZ
+                analizador = OrcaParser(ruta_salida)
 
-            st.session_state.opt_convergida = verificar_convergencia_optimizacion(ruta_salida)
-            st.session_state.xyz_optimizada = extraer_geometria_optimizada(ruta_salida)
-            st.session_state.energia_final = extraer_energia_final(ruta_salida)
-            st.session_state.datos_energia = extraer_componentes_energia(ruta_salida)
-            st.session_state.datos_cargas = extraer_cargas_atomicas(ruta_salida)
-            st.session_state.datos_orbitales = extraer_energias_orbitales(ruta_salida)
-            st.session_state.datos_cargas_reducidas = extraer_cargas_orbitales_reducidas(ruta_salida)
+                # Guardar logs en el estado de la sesión
+                st.session_state.log_completo_orca = analizador.contenido
+                st.session_state.resumen_log_orca = "".join(analizador.contenido.splitlines(True)[-50:])
 
-            if tipo_calculo == "Frecuencias Vibracionales (IR)":
-                st.session_state.datos_ir = extraer_espectro_ir(ruta_salida, factor_escalamiento)
+                # Extraer todos los datos usando los métodos de la clase
+                st.session_state.opt_convergida = analizador.verificar_convergencia_optimizacion()
+                st.session_state.xyz_optimizada = analizador.extraer_geometria_optimizada()
+                st.session_state.energia_final = analizador.extraer_energia_final()
+                st.session_state.datos_energia = analizador.extraer_componentes_energia()
+                st.session_state.datos_cargas = analizador.extraer_cargas_atomicas()
+                st.session_state.datos_orbitales = analizador.extraer_energias_orbitales()
+                st.session_state.datos_cargas_reducidas = analizador.extraer_cargas_orbitales_reducidas()
+
+                if tipo_calculo == "Frecuencias Vibracionales (IR)":
+                    st.session_state.datos_ir = analizador.extraer_espectro_ir(factor_escalamiento)
+
+            except Exception as e:
+                st.error(f"Ocurrió un error al analizar el archivo de salida: {e}")
 
         st.rerun()
 
+# --- Visualización de Resultados (sin cambios en la lógica de visualización) ---
 if st.session_state.energia_final is not None:
     st.markdown("---")
     col1, col2, col3, col4 = st.columns(4)
@@ -225,10 +248,10 @@ with tabs[1]:
         fig, ax = plt.subplots(figsize=(12, 6))
         ax.stem(st.session_state.datos_ir["Frequency"], st.session_state.datos_ir["Intensity"], basefmt=' ',
                 linefmt='red', markerfmt='ro')
-        ax.set_xlabel("Número de onda (cm⁻¹)");
-        ax.set_ylabel("Intensidad IR (km/mol)");
+        ax.set_xlabel("Número de onda (cm⁻¹)")
+        ax.set_ylabel("Intensidad IR (km/mol)")
         ax.set_title("Espectro IR Teórico")
-        ax.invert_xaxis();
+        ax.invert_xaxis()
         ax.grid(True, alpha=0.3)
         st.pyplot(fig)
         st.dataframe(st.session_state.datos_ir.style.format({"Frequency": "{:.2f}", "Intensity": "{:.2f}"}),
@@ -244,11 +267,11 @@ with tabs[2]:
         st.info("💡 Ejecuta un cálculo para ver el análisis detallado.")
     else:
         st.markdown("### ⚡ **Componentes Energéticos**")
-        if st.session_state.datos_energia is not None:
+        if st.session_state.datos_energia is not None and not st.session_state.datos_energia.empty:
             st.dataframe(st.session_state.datos_energia, use_container_width=True)
 
         st.markdown("### 🔋 **Energías Orbitales**")
-        if st.session_state.datos_orbitales is not None:
+        if st.session_state.datos_orbitales is not None and not st.session_state.datos_orbitales.empty:
             st.dataframe(st.session_state.datos_orbitales, use_container_width=True)
 
         st.markdown("### ⚛️ **Análisis de Cargas**")
@@ -256,22 +279,20 @@ with tabs[2]:
         with col1:
             st.markdown("#### Cargas Atómicas")
             if st.session_state.datos_cargas:
-                if 'Mulliken' in st.session_state.datos_cargas and not st.session_state.datos_cargas['Mulliken'].empty:
-                    st.write("**Cargas de Mulliken**");
+                if 'Mulliken' in st.session_state.datos_cargas:
+                    st.write("**Cargas de Mulliken**")
                     st.dataframe(st.session_state.datos_cargas['Mulliken'])
-                if 'Loewdin' in st.session_state.datos_cargas and not st.session_state.datos_cargas['Loewdin'].empty:
-                    st.write("**Cargas de Loewdin**");
+                if 'Loewdin' in st.session_state.datos_cargas:
+                    st.write("**Cargas de Loewdin**")
                     st.dataframe(st.session_state.datos_cargas['Loewdin'])
         with col2:
             st.markdown("#### Cargas Orbitales Reducidas")
             if st.session_state.datos_cargas_reducidas:
-                if 'Mulliken' in st.session_state.datos_cargas_reducidas and not \
-                st.session_state.datos_cargas_reducidas['Mulliken'].empty:
-                    st.write("**Mulliken (Reducidas)**");
+                if 'Mulliken' in st.session_state.datos_cargas_reducidas:
+                    st.write("**Mulliken (Reducidas)**")
                     st.dataframe(st.session_state.datos_cargas_reducidas['Mulliken'])
-                if 'Loewdin' in st.session_state.datos_cargas_reducidas and not st.session_state.datos_cargas_reducidas[
-                    'Loewdin'].empty:
-                    st.write("**Loewdin (Reducidas)**");
+                if 'Loewdin' in st.session_state.datos_cargas_reducidas:
+                    st.write("**Loewdin (Reducidas)**")
                     st.dataframe(st.session_state.datos_cargas_reducidas['Loewdin'])
 
 with tabs[3]:
@@ -282,9 +303,8 @@ with tabs[3]:
         if st.session_state.log_completo_orca:
             st.download_button(label="💾 Descargar Archivo .out Completo", data=st.session_state.log_completo_orca,
                                file_name=f"{st.session_state.nombre_trabajo}.out")
-            with st.expander("📄 Ver Log Completo"):
-                st.code(st.session_state.log_completo_orca, language='text')
+            with st.expander("📄 Ver Resumen del Log (últimas 50 líneas)"):
+                st.code(st.session_state.resumen_log_orca, language='text')
 
 st.markdown("---")
 st.markdown("*Desarrollado con Streamlit • Cálculos cuánticos con ORCA*")
-
