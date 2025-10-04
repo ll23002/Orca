@@ -50,8 +50,6 @@ if "nombre_trabajo" not in st.session_state:
 
 DIR_CALCULOS = "calculations"
 os.makedirs(DIR_CALCULOS, exist_ok=True)
-
-# --- Panel Lateral (Sidebar - sin cambios) ---
 with st.sidebar:
     st.markdown("### ⚛️ Panel de Control")
     st.markdown("---")
@@ -104,7 +102,6 @@ with st.sidebar:
     st.markdown("#### 🚀 **Ejecutar Cálculo**")
     boton_ejecutar = st.button(
         "🎯 **CALCULAR**",
-        use_container_width=True,
         type="primary",
         help="Inicia el cálculo cuántico con ORCA"
     )
@@ -115,12 +112,10 @@ with st.sidebar:
         else:
             st.warning("⚠️ No convergió")
 
-# --- Lógica del Botón de Cálculo ---
 if boton_ejecutar:
     if st.session_state.xyz_inicial is None:
         st.sidebar.error("Por favor, carga un archivo .xyz primero.")
     else:
-        # Resetea el estado de la sesión para el nuevo cálculo
         for key in st.session_state.keys():
             if key not in ['xyz_inicial', 'nombre_trabajo']:
                 st.session_state[key] = None if not isinstance(st.session_state[key], bool) else False
@@ -128,7 +123,6 @@ if boton_ejecutar:
         st.session_state.ultimo_tipo_calculo = tipo_calculo
         nombre_trabajo = st.session_state.nombre_trabajo
 
-        # --- CAMBIO 2: Llamar al método estático de la clase ---
         contenido_entrada = Orca.generar_entrada(
             st.session_state.xyz_inicial, tipo_calculo, metodo, conjunto_base, palabras_clave
         )
@@ -138,18 +132,16 @@ if boton_ejecutar:
         with open(ruta_entrada, "w") as f:
             f.write(contenido_entrada)
 
-        # Ejecutar el cálculo de ORCA
         with st.spinner(f"Ejecutando ORCA para '{nombre_trabajo}'... Esto puede tardar varios minutos."):
             try:
                 comando = f"orca {ruta_entrada}"
-                # Usamos Popen para manejar mejor la salida en tiempo real si fuera necesario
                 proceso = subprocess.run(
                     comando,
                     shell=True,
                     check=True,
                     capture_output=True,
                     text=True,
-                    timeout=600 # Timeout de 10 minutos
+                    timeout=600
                 )
                 with open(ruta_salida, "w") as f_out:
                     f_out.write(proceso.stdout)
@@ -164,17 +156,13 @@ if boton_ejecutar:
             except Exception as e:
                 st.error(f"Error inesperado: {e}")
 
-        # --- CAMBIO 3: Usar la clase OrcaParser para analizar el resultado ---
         if os.path.exists(ruta_salida):
             try:
-                # Instanciar el analizador UNA SOLA VEZ
                 analizador = Orca(ruta_salida)
 
-                # Guardar logs en el estado de la sesión
                 st.session_state.log_completo_orca = analizador.contenido
                 st.session_state.resumen_log_orca = "".join(analizador.contenido.splitlines(True)[-50:])
 
-                # Extraer todos los datos usando los métodos de la clase
                 st.session_state.opt_convergida = analizador.verificar_convergencia()
                 st.session_state.xyz_optimizada = analizador.extraer_geometria_optimizada()
                 st.session_state.energia_final = analizador.extraer_energia_final()
@@ -182,19 +170,15 @@ if boton_ejecutar:
                 st.session_state.datos_cargas = analizador.extraer_cargas_atomicas()
                 st.session_state.datos_orbitales = analizador.extraer_energias_orbitales()
                 st.session_state.datos_cargas_reducidas = analizador.extraer_cargas_orbitales_reducidas()
-                print("si llega aqui")
 
                 if tipo_calculo == "Frecuencias Vibracionales (IR)":
-                    print("si lo llama")
                     st.session_state.datos_ir = analizador.extraer_espectro_ir(factor_escalamiento)
-                print("si pasa por qui")
 
             except Exception as e:
                 st.error(f"Ocurrió un error al analizar el archivo de salida: {e}")
 
         st.rerun()
 
-# --- Visualización de Resultados (sin cambios en la lógica de visualización) ---
 if st.session_state.energia_final is not None:
     st.markdown("---")
     col1, col2, col3, col4 = st.columns(4)
@@ -252,8 +236,7 @@ with tabs[1]:
         ax.invert_xaxis()
         ax.grid(True, alpha=0.3)
         st.pyplot(fig)
-        st.dataframe(st.session_state.datos_ir.style.format({"Frequency": "{:.2f}", "Intensity": "{:.2f}"}),
-                     use_container_width=True)
+        st.dataframe(st.session_state.datos_ir.style.format({"Frequency": "{:.2f}", "Intensity": "{:.2f}"}))
     elif st.session_state.ultimo_tipo_calculo == "Frecuencias Vibracionales (IR)":
         st.warning(
             "⚠️ No se encontraron datos IR. Verifica que la optimización haya convergido en la pestaña de Datos Técnicos.")
@@ -266,11 +249,11 @@ with tabs[2]:
     else:
         st.markdown("### ⚡ **Componentes Energéticos**")
         if st.session_state.datos_energia is not None and not st.session_state.datos_energia.empty:
-            st.dataframe(st.session_state.datos_energia, use_container_width=True)
+            st.dataframe(st.session_state.datos_energia)
 
         st.markdown("### 🔋 **Energías Orbitales**")
         if st.session_state.datos_orbitales is not None and not st.session_state.datos_orbitales.empty:
-            st.dataframe(st.session_state.datos_orbitales, use_container_width=True)
+            st.dataframe(st.session_state.datos_orbitales)
 
         st.markdown("### ⚛️ **Análisis de Cargas**")
         col1, col2 = st.columns(2)
