@@ -2,29 +2,8 @@ import pandas as pd
 import re
 
 
-class OrcaParser:
-    """
-    Una clase para generar entradas y analizar archivos de salida de ORCA.
-
-    Esta clase encapsula un conjunto de herramientas para la química computacional con ORCA.
-    Lee un archivo de salida una sola vez y permite ejecutar múltiples funciones de
-    extracción de datos sobre su contenido, lo cual es mucho más eficiente.
-
-    Atributos:
-        ruta (str): La ruta al archivo de salida de ORCA.
-        contenido (str): El contenido completo del archivo de salida leído.
-    """
-
+class Orca:
     def __init__(self, ruta_salida):
-        """
-        Inicializa el analizador leyendo el archivo de salida de ORCA.
-
-        Args:
-            ruta_salida (str): La ruta al archivo .out de ORCA.
-
-        Raises:
-            FileNotFoundError: Si el archivo no se encuentra en la ruta especificada.
-        """
         self.ruta = ruta_salida
         try:
             with open(ruta_salida, 'r', encoding='utf-8', errors='ignore') as f:
@@ -33,11 +12,7 @@ class OrcaParser:
             raise FileNotFoundError(f"No se encontró el archivo de salida en: {ruta_salida}")
 
     @staticmethod
-    def generar_entrada_orca(contenido_xyz, tipo_calculo, metodo, base, palabras_clave):
-        """
-        Genera una cadena de texto para un archivo de entrada de ORCA de forma robusta.
-        Esta función es estática porque no depende de un archivo de salida.
-        """
+    def generar_entrada(contenido_xyz, tipo_calculo, metodo, base, palabras_clave):
         palabras_base = f"! {metodo} {base} {palabras_clave}"
 
         if tipo_calculo == "Optimización de Geometría":
@@ -50,35 +25,29 @@ class OrcaParser:
         encabezado = f"{palabras_base} {palabras_calculo}\n"
         lineas = contenido_xyz.strip().split('\n')
 
-        # --- MEJORA: Lectura robusta de coordenadas ---
         try:
             num_atomos = int(lineas[0].strip())
-            # Detecta si la segunda línea ya es una coordenada o un comentario
             if len(lineas[1].strip().split()) > 1 and lineas[1].strip().split()[0].isalpha():
                 lineas_coords = lineas[1:1 + num_atomos]
             else:
                 lineas_coords = lineas[2:2 + num_atomos]
         except (ValueError, IndexError):
-            # Método de respaldo en caso de formato inesperado
             lineas_coords = lineas[2:]
 
         coords_str = "\n".join(lineas_coords)
         bloque_xyz = f"* xyz 0 1\n{coords_str}\n*\n"
         return encabezado + bloque_xyz
 
-    def verificar_convergencia_optimizacion(self):
-        """Verifica si la optimización de geometría ha convergido."""
+    def verificar_convergencia(self):
         return "THE OPTIMIZATION HAS CONVERGED" in self.contenido
 
     def extraer_energia_final(self):
-        """Extrae la energía final de punto único (FINAL SINGLE POINT ENERGY)."""
         coincidencias = re.findall(r'FINAL SINGLE POINT ENERGY\s+([-\d.]+)', self.contenido)
         if coincidencias:
             return float(coincidencias[-1])
         return None
 
     def extraer_geometria_optimizada(self):
-        """Extrae la última geometría del archivo (la optimizada) en formato XYZ."""
         patron = r'CARTESIAN COORDINATES \(ANGSTROEM\)\s*\n\s*-+\s*\n((?:\s*\S+\s+[-\d.]+\s+[-\d.]+\s+[-\d.]+\s*\n)+)'
         coincidencias = list(re.finditer(patron, self.contenido))
         if not coincidencias:
@@ -94,13 +63,12 @@ class OrcaParser:
         for linea in lineas_coords:
             partes = linea.split()
             if len(partes) >= 4:
-                bloque_xyz += f"{partes[0]:<2} {float(partes[1]):>12.6f} {float(partes[2]):>12.6f} {float(partes[3]):>12.6f}\n"
+                bloque_xyz += f"{partes[0]:<2} " + " ".join(f"{float(coord):>12.6f}" for coord in partes[1:4]) + "\n"
         return bloque_xyz
 
     def extraer_espectro_ir(self, factor_escalamiento=1.0):
-        """Extrae las frecuencias vibracionales y las intensidades del espectro IR."""
-        patron_ir_bloque = r'IR SPECTRUM\s*\n-+\n(?:.|\n)*?-+\n((?:.|\n)*?)(?=\n\s*\*|\n\s*-{2,}\n[A-Z]|\Z)'
-        coincidencia = re.search(patron_ir_bloque, self.contenido)
+        patron = r'IR SPECTRUM\s*\n-+\n(?:.|\n)*?-+\n((?:.|\n)*?)(?=\n\s*\*|\n\s*-{2,}\n[A-Z]|\Z)'
+        coincidencia = re.search(patron, self.contenido)
 
         if not coincidencia:
             return pd.DataFrame()
@@ -114,7 +82,6 @@ class OrcaParser:
                 try:
                     freq = float(partes[1])
                     intensidad = float(partes[3])
-                    # Filtro para ignorar modos de traslación/rotación
                     if freq > 10.0:
                         datos.append({"Frequency": freq * factor_escalamiento, "Intensity": intensidad})
                 except (ValueError, IndexError):
@@ -123,7 +90,6 @@ class OrcaParser:
         return pd.DataFrame(datos)
 
     def extraer_componentes_energia(self):
-        """Extrae los componentes finales de la energía (nuclear, electrónica, etc.)."""
         patrones = {
             "Repulsión Nuclear": r'Nuclear Repulsion\s+:\s*([-\d.]+)',
             "Energía Electrónica": r'Electronic Energy\s+:\s*([-\d.]+)',
@@ -139,12 +105,10 @@ class OrcaParser:
         return pd.DataFrame.from_dict(energias, orient='index', columns=['Energía (Hartree)']) if energias else None
 
     def extraer_cargas_atomicas(self):
-        """Extrae las cargas atómicas finales de Mulliken y Loewdin."""
         datos_cargas = {}
         for tipo in ['MULLIKEN', 'LOEWDIN']:
             patron = re.compile(rf'{tipo} ATOMIC CHARGES\s*\n-+\n((?:.|\n)*?)(?=\n\n|\Z)')
 
-            # --- CORRECCIÓN: Usar finditer y tomar la última coincidencia ---
             coincidencias = list(re.finditer(patron, self.contenido))
             if coincidencias:
                 coincidencia_final = coincidencias[-1]
@@ -159,10 +123,8 @@ class OrcaParser:
         return datos_cargas if datos_cargas else None
 
     def extraer_energias_orbitales(self):
-        """Extrae las energías de los orbitales moleculares finales."""
         patron = re.compile(r'ORBITAL ENERGIES\s*\n-+\n((?:.|\n)*?)(?=\n\n|\Z|\*Only the first)')
 
-        # --- CORRECCIÓN: Usar finditer y tomar la última coincidencia ---
         coincidencias = list(re.finditer(patron, self.contenido))
         if not coincidencias:
             return None
@@ -170,7 +132,6 @@ class OrcaParser:
         coincidencia_final = coincidencias[-1]
 
         orbitales = []
-        # Omitir los encabezados de la tabla (índice [2:])
         for linea in coincidencia_final.group(1).strip().split('\n')[2:]:
             partes = linea.split()
             if len(partes) == 4:

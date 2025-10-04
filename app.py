@@ -6,24 +6,19 @@ import pandas as pd
 import py3Dmol
 from stmol import showmol
 import matplotlib.pyplot as plt
+from utils import Orca
 
-# --- CAMBIO 1: Importar la clase OrcaParser desde utils.py ---
-from utils import OrcaParser
-
-# --- Configuración de la Página ---
 st.set_page_config(
     page_title="ORCA Molecular",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# --- Título de la Aplicación ---
 col1, col2 = st.columns([3, 1])
 with col1:
     st.title("🧬 ORCA Molecular Calculator")
     st.markdown("*Calculadora cuántica para análisis molecular*")
 
-# --- Inicialización del Estado de la Sesión (sin cambios) ---
 if "calculo_completado" not in st.session_state:
     st.session_state.calculo_completado = False
 if "opt_convergida" not in st.session_state:
@@ -134,7 +129,7 @@ if boton_ejecutar:
         nombre_trabajo = st.session_state.nombre_trabajo
 
         # --- CAMBIO 2: Llamar al método estático de la clase ---
-        contenido_entrada = OrcaParser.generar_entrada_orca(
+        contenido_entrada = Orca.generar_entrada(
             st.session_state.xyz_inicial, tipo_calculo, metodo, conjunto_base, palabras_clave
         )
         ruta_entrada = os.path.join(DIR_CALCULOS, f"{nombre_trabajo}.inp")
@@ -173,23 +168,26 @@ if boton_ejecutar:
         if os.path.exists(ruta_salida):
             try:
                 # Instanciar el analizador UNA SOLA VEZ
-                analizador = OrcaParser(ruta_salida)
+                analizador = Orca(ruta_salida)
 
                 # Guardar logs en el estado de la sesión
                 st.session_state.log_completo_orca = analizador.contenido
                 st.session_state.resumen_log_orca = "".join(analizador.contenido.splitlines(True)[-50:])
 
                 # Extraer todos los datos usando los métodos de la clase
-                st.session_state.opt_convergida = analizador.verificar_convergencia_optimizacion()
+                st.session_state.opt_convergida = analizador.verificar_convergencia()
                 st.session_state.xyz_optimizada = analizador.extraer_geometria_optimizada()
                 st.session_state.energia_final = analizador.extraer_energia_final()
                 st.session_state.datos_energia = analizador.extraer_componentes_energia()
                 st.session_state.datos_cargas = analizador.extraer_cargas_atomicas()
                 st.session_state.datos_orbitales = analizador.extraer_energias_orbitales()
                 st.session_state.datos_cargas_reducidas = analizador.extraer_cargas_orbitales_reducidas()
+                print("si llega aqui")
 
                 if tipo_calculo == "Frecuencias Vibracionales (IR)":
+                    print("si lo llama")
                     st.session_state.datos_ir = analizador.extraer_espectro_ir(factor_escalamiento)
+                print("si pasa por qui")
 
             except Exception as e:
                 st.error(f"Ocurrió un error al analizar el archivo de salida: {e}")
