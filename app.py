@@ -6,7 +6,7 @@ import pandas as pd
 import py3Dmol
 from stmol import showmol
 import matplotlib.pyplot as plt
-from utils import Orca
+from utils import Orca, PySCFCalculator
 
 st.set_page_config(
     page_title="ORCA Molecular",
@@ -47,12 +47,14 @@ if "log_completo_orca" not in st.session_state:
     st.session_state.log_completo_orca = None
 if "nombre_trabajo" not in st.session_state:
     st.session_state.nombre_trabajo = ""
-# --- 1. AÑADIR ESTADO PARA NMR ---
 if "datos_nmr" not in st.session_state:
     st.session_state.datos_nmr = None
+if "datos_susceptibilidad" not in st.session_state:
+    st.session_state.datos_susceptibilidad = None
 
 DIR_CALCULOS = "calculations"
 os.makedirs(DIR_CALCULOS, exist_ok=True)
+
 with st.sidebar:
     st.markdown("### ⚛️ Panel de Control")
     st.markdown("---")
@@ -88,14 +90,18 @@ with st.sidebar:
             help="Corrección para frecuencias calculadas"
         )
 
-    # --- 2. AÑADIR CHECKBOX PARA NMR ---
     st.markdown("##### 🔬 Propiedades Adicionales")
     calc_nmr = st.checkbox(
         "Calcular Apantallamiento (NMR)",
         help="Calcula las propiedades de RMN (Apantallamiento Isotrópico)",
         value=False
     )
-    # -----------------------------------
+
+    calc_susceptibilidad = st.checkbox(
+        "🧲 Calcular Susceptibilidad Magnética (PySCF)",
+        help="Calcula magnetismo/diamagnetismo usando PySCF",
+        value=False
+    )
 
     st.markdown("---")
 
@@ -128,7 +134,7 @@ if boton_ejecutar:
     if st.session_state.xyz_inicial is None:
         st.sidebar.error("Por favor, carga un archivo .xyz primero.")
     else:
-        # Limpiar estados, excepto los iniciales
+        # Limpiar estados
         claves_a_preservar = ['xyz_inicial', 'nombre_trabajo']
         for key in st.session_state.keys():
             if key not in claves_a_preservar:
@@ -137,12 +143,10 @@ if boton_ejecutar:
         st.session_state.ultimo_tipo_calculo = tipo_calculo
         nombre_trabajo = st.session_state.nombre_trabajo
 
-        # --- 3. MODIFICAR LLAMADA A generar_entrada ---
         contenido_entrada = Orca.generar_entrada(
             st.session_state.xyz_inicial, tipo_calculo, metodo, conjunto_base, palabras_clave,
-            calc_nmr=calc_nmr  # Pasar el valor del checkbox
+            calc_nmr=calc_nmr
         )
-        # -----------------------------------------------
 
         ruta_entrada = os.path.join(DIR_CALCULOS, f"{nombre_trabajo}.inp")
         ruta_salida = os.path.join(DIR_CALCULOS, f"{nombre_trabajo}.out")
@@ -188,16 +192,24 @@ if boton_ejecutar:
                 st.session_state.datos_cargas = analizador.extraer_cargas_atomicas()
                 st.session_state.datos_orbitales = analizador.extraer_energias_orbitales()
                 st.session_state.datos_cargas_reducidas = analizador.extraer_cargas_orbitales_reducidas()
-
-                # --- 4. AÑADIR LLAMADA AL PARSER DE NMR ---
                 st.session_state.datos_nmr = analizador.extraer_datos_nmr()
-                # ------------------------------------------
 
                 if tipo_calculo == "Frecuencias Vibracionales (IR)":
                     st.session_state.datos_ir = analizador.extraer_espectro_ir(factor_escalamiento)
 
             except Exception as e:
                 st.error(f"Ocurrió un error al analizar el archivo de salida: {e}")
+
+        if calc_susceptibilidad:
+            xyz_para_pyscf = st.session_state.xyz_optimizada if st.session_state.xyz_optimizada else st.session_state.xyz_inicial
+
+            with st.spinner("🧲 Calculando susceptibilidad magnética con PySCF..."):
+                resultados = PySCFCalculator.calcular_susceptibilidad(
+                    xyz_para_pyscf,
+                    metodo=metodo,
+                    base=conjunto_base
+                )
+                st.session_state.datos_susceptibilidad = resultados
 
         st.rerun()
 
@@ -217,9 +229,9 @@ if st.session_state.energia_final is not None:
         st.metric("🧮 Método", f"{metodo}/{conjunto_base}")
     st.markdown("---")
 
-tabs = st.tabs(["🔬 **Visualización 3D**", "📈 **Espectroscopía**", "⚡ **Análisis Energético**", "🔧 **Datos Técnicos**"])
+tabs = st.tabs(["🔬 **Visualización 3D**", "📈 **Espectroscopía**", "🧲 **Magnetismo**", "⚡ **Análisis Energético**",
+                "🔧 **Datos Técnicos**"])
 
-# ... (El código de tabs[0] 'Visualización 3D' no cambia) ...
 with tabs[0]:
     if not st.session_state.calculo_completado and st.session_state.xyz_inicial is None:
         st.info("💡 Carga un archivo .xyz en la barra lateral para empezar.")
@@ -247,12 +259,10 @@ with tabs[0]:
             vista_opt.zoomTo()
             showmol(vista_opt, height=450, width=450)
 
-# --- 5. REESTRUCTURAR LA PESTAÑA de Espectroscopía ---
 with tabs[1]:
     ir_disponible = st.session_state.datos_ir is not None and not st.session_state.datos_ir.empty
     nmr_disponible = st.session_state.datos_nmr is not None and not st.session_state.datos_nmr.empty
 
-    # --- Sección de IR (sin cambios) ---
     if ir_disponible:
         st.markdown("### 📊 **Espectro Infrarrojo (IR)**")
         fig, ax = plt.subplots(figsize=(12, 6))
@@ -266,14 +276,11 @@ with tabs[1]:
         st.pyplot(fig)
         st.dataframe(st.session_state.datos_ir.style.format({"Frequency": "{:.2f}", "Intensity": "{:.2f}"}))
 
-    # --- Mensaje de advertencia para IR (si se pidió y falló) ---
     elif not ir_disponible and st.session_state.ultimo_tipo_calculo == "Frecuencias Vibracionales (IR)":
-        st.warning(
-            "⚠️ No se encontraron datos IR. Verifica que la optimización haya convergido en la pestaña de Datos Técnicos.")
+        st.warning("⚠️ No se encontraron datos IR. Verifica que la optimización haya convergido.")
 
-    # --- Sección de NMR ---
     if ir_disponible and nmr_disponible:
-        st.markdown("---")  # Separador visual si hay IR
+        st.markdown("---")
 
     if nmr_disponible:
         st.markdown("### 🛡️ **Apantallamiento Nuclear (NMR)**")
@@ -285,14 +292,84 @@ with tabs[1]:
             "Anisotropía (ppm)": "{:.3f}"
         }), use_container_width=True)
 
-    # --- Mensaje de Información general (si no hay nada) ---
-    if not ir_disponible and not nmr_disponible and st.session_state.ultimo_tipo_calculo != "Frecuencias Vibracionales (IR)":
+    if not ir_disponible and not nmr_disponible:
         st.info(
-            "💡 Selecciona 'Frecuencias Vibracionales (IR)' y/o 'Calcular Apantallamiento (NMR)' en la barra lateral y ejecuta un cálculo para ver los espectros.")
-
-# ... (El resto de 'app.py', es decir, tabs[2], tabs[3] y el pie de página, no cambian) ...
+            "💡 Selecciona 'Frecuencias Vibracionales (IR)' y/o 'Calcular Apantallamiento (NMR)' en la barra lateral.")
 
 with tabs[2]:
+    if st.session_state.datos_susceptibilidad is None:
+        st.info("💡 Activa '🧲 Calcular Susceptibilidad Magnética (PySCF)' en la barra lateral y ejecuta un cálculo.")
+    elif "error" in st.session_state.datos_susceptibilidad:
+        st.error(f"❌ {st.session_state.datos_susceptibilidad['error']}")
+    else:
+        datos = st.session_state.datos_susceptibilidad
+
+        st.markdown("### 🧲 **Susceptibilidad Magnética Molecular**")
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric(
+                "χ Isotrópica (CGS)",
+                f"{datos['isotropico_cgs']:.2f}",
+                help="Susceptibilidad magnética en unidades de 10⁻⁶ cm³/mol"
+            )
+        with col2:
+            st.metric(
+                "Tipo de Magnetismo",
+                datos['tipo'],
+                help="Diamagnético (χ < 0) o Paramagnético (χ > 0)"
+            )
+        with col3:
+            st.metric(
+                "χ (a.u.)",
+                f"{datos['isotropico_au']:.6f}",
+                help="Susceptibilidad en unidades atómicas"
+            )
+
+        st.markdown("---")
+
+        st.markdown("#### 📊 **Tensor de Susceptibilidad Magnética (a.u.)**")
+        tensor_df = pd.DataFrame(
+            datos['tensor'],
+            columns=['X', 'Y', 'Z'],
+            index=['X', 'Y', 'Z']
+        )
+        st.dataframe(tensor_df.style.format("{:.6f}"), use_container_width=True)
+
+        st.markdown("#### 📈 **Componentes del Tensor**")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        componentes = ['χ_XX', 'χ_YY', 'χ_ZZ']
+        valores = [datos['tensor'][0][0], datos['tensor'][1][1], datos['tensor'][2][2]]
+        colores = ['#FF6B6B' if v < 0 else '#4ECDC4' for v in valores]
+
+        ax.bar(componentes, valores, color=colores, alpha=0.7, edgecolor='black')
+        ax.axhline(y=0, color='black', linestyle='--', linewidth=0.8)
+        ax.set_ylabel('Susceptibilidad (a.u.)')
+        ax.set_title('Componentes Diagonales del Tensor χ')
+        ax.grid(True, alpha=0.3, axis='y')
+        st.pyplot(fig)
+
+        st.markdown("---")
+        st.markdown("#### ℹ️ **Interpretación**")
+        if datos['tipo'] == "Diamagnético":
+            st.info("""
+            **Sustancia Diamagnética** (χ < 0):
+            - Repelida débilmente por campos magnéticos
+            - Todos los electrones están apareados
+            - Ejemplo: H₂O, CH₄, NaCl
+            """)
+        else:
+            st.success("""
+            **Sustancia Paramagnética** (χ > 0):
+            - Atraída por campos magnéticos
+            - Presencia de electrones desapareados
+            - Ejemplo: O₂, NO, radicales libres
+            """)
+        # Después de las métricas en el tab de Magnetismo, agrega:
+        if 'nota' in datos:
+            st.info(f"ℹ️ **Nota:** {datos['nota']}")
+
+with tabs[3]:
     if not st.session_state.calculo_completado:
         st.info("💡 Ejecuta un cálculo para ver el análisis detallado.")
     else:
@@ -325,16 +402,19 @@ with tabs[2]:
                     st.write("**Loewdin (Reducidas)**")
                     st.dataframe(st.session_state.datos_cargas_reducidas['Loewdin'])
 
-with tabs[3]:
+with tabs[4]:
     if not st.session_state.calculo_completado:
         st.info("💡 Ejecuta un cálculo para ver los datos técnicos.")
     else:
         st.markdown("### 📋 **Log de Salida de ORCA**")
         if st.session_state.log_completo_orca:
-            st.download_button(label="💾 Descargar Archivo .out Completo", data=st.session_state.log_completo_orca,
-                               file_name=f"{st.session_state.nombre_trabajo}.out")
+            st.download_button(
+                label="💾 Descargar Archivo .out Completo",
+                data=st.session_state.log_completo_orca,
+                file_name=f"{st.session_state.nombre_trabajo}.out"
+            )
             with st.expander("📄 Ver Resumen del Log (últimas 50 líneas)"):
                 st.code(st.session_state.resumen_log_orca, language='text')
 
 st.markdown("---")
-st.markdown("*Desarrollado con Streamlit • Cálculos cuánticos con ORCA*")
+st.markdown("*Desarrollado con Streamlit • Cálculos cuánticos con ORCA y PySCF*")

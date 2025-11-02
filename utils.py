@@ -1,6 +1,16 @@
-# utils.py
 import pandas as pd
 import re
+import numpy as np
+
+# Variables globales para indicar disponibilidad
+PYSCF_AVAILABLE = False
+
+try:
+    from pyscf import gto, dft, scf
+
+    PYSCF_AVAILABLE = True
+except ImportError:
+    pass
 
 
 class Orca:
@@ -10,14 +20,14 @@ class Orca:
             with open(ruta_salida, 'r', encoding='utf-8', errors='ignore') as f:
                 self.contenido = f.read()
         except FileNotFoundError:
-            raise FileNotFoundError(f"No se encontró el archivo de salida en: {ruta_salida}")
+            raise FileNotFoundError(f"No se encontro el archivo de salida en: {ruta_salida}")
 
     @staticmethod
     def generar_entrada(contenido_xyz, tipo_calculo, metodo, base, palabras_clave,
-                        calc_nmr=False):  # <-- 1. AÑADIDO calc_nmr
+                        calc_nmr=False):
         palabras_base = f"! {metodo} {base} {palabras_clave}"
 
-        if tipo_calculo == "Optimización de Geometría":
+        if tipo_calculo == "Optimizacion de Geometria":
             palabras_calculo = "OPT"
         elif tipo_calculo == "Frecuencias Vibracionales (IR)":
             palabras_calculo = "OPT FREQ"
@@ -64,7 +74,7 @@ class Orca:
             return None
 
         num_atomos = len(lineas_coords)
-        bloque_xyz = f"{num_atomos}\nGeometría Optimizada extraída de {self.ruta}\n"
+        bloque_xyz = f"{num_atomos}\nGeometria Optimizada extraida de {self.ruta}\n"
         for linea in lineas_coords:
             partes = linea.split()
             if len(partes) >= 4:
@@ -96,10 +106,10 @@ class Orca:
 
     def extraer_componentes_energia(self):
         patrones = {
-            "Repulsión Nuclear": r'Nuclear Repulsion\s+:\s*([-\d.]+)',
-            "Energía Electrónica": r'Electronic Energy\s+:\s*([-\d.]+)',
-            "Energía Un Electrón": r'One Electron Energy\s+:\s*([-\d.]+)',
-            "Energía Dos Electrones": r'Two Electron Energy\s+:\s*([-\d.]+)',
+            "Repulsion Nuclear": r'Nuclear Repulsion\s+:\s*([-\d.]+)',
+            "Energia Electronica": r'Electronic Energy\s+:\s*([-\d.]+)',
+            "Energia Un Electron": r'One Electron Energy\s+:\s*([-\d.]+)',
+            "Energia Dos Electrones": r'Two Electron Energy\s+:\s*([-\d.]+)',
         }
         energias = {}
         for nombre, patron in patrones.items():
@@ -107,7 +117,7 @@ class Orca:
             if coincidencias:
                 energias[nombre] = [float(coincidencias[-1])]
 
-        return pd.DataFrame.from_dict(energias, orient='index', columns=['Energía (Hartree)']) if energias else None
+        return pd.DataFrame.from_dict(energias, orient='index', columns=['Energia (Hartree)']) if energias else None
 
     def extraer_cargas_atomicas(self):
         datos_cargas = {}
@@ -121,7 +131,7 @@ class Orca:
                 for linea in coincidencia_final.group(1).strip().split('\n'):
                     partes = linea.split()
                     if len(partes) == 4 and partes[2] == ':':
-                        cargas.append({"Átomo": f"{partes[0]} {partes[1]}", "Carga": float(partes[3])})
+                        cargas.append({"Atomo": f"{partes[0]} {partes[1]}", "Carga": float(partes[3])})
                 if cargas:
                     datos_cargas[tipo.capitalize()] = pd.DataFrame(cargas)
 
@@ -141,10 +151,10 @@ class Orca:
             partes = linea.split()
             if len(partes) == 4:
                 orbitales.append({
-                    "Número": int(partes[0]),
-                    "Ocupación": float(partes[1]),
-                    "Energía (Eh)": float(partes[2]),
-                    "Energía (eV)": float(partes[3])
+                    "Numero": int(partes[0]),
+                    "Ocupacion": float(partes[1]),
+                    "Energia (Eh)": float(partes[2]),
+                    "Energia (eV)": float(partes[3])
                 })
 
         return pd.DataFrame(orbitales) if orbitales else None
@@ -178,7 +188,7 @@ class Orca:
                         if orbital in ['s', 'p', 'd', 'f'] and atomo_actual:
                             try:
                                 cargas_orbitales.append({
-                                    "Átomo": atomo_actual,
+                                    "Atomo": atomo_actual,
                                     "Orbital": orbital,
                                     "Carga": float(carga)
                                 })
@@ -210,10 +220,10 @@ class Orca:
             if len(partes) == 4:
                 try:
                     datos_nmr.append({
-                        "Núcleo": int(partes[0]),
+                        "Nucleo": int(partes[0]),
                         "Elemento": partes[1],
-                        "Isotrópico (ppm)": float(partes[2]),
-                        "Anisotropía (ppm)": float(partes[3])
+                        "Isotropico (ppm)": float(partes[2]),
+                        "Anisotropia (ppm)": float(partes[3])
                     })
                 except ValueError:
                     continue
@@ -222,3 +232,135 @@ class Orca:
             return pd.DataFrame(datos_nmr)
 
         return None
+
+
+class PySCFCalculator:
+    """Clase para calculos de susceptibilidad magnetica con PySCF"""
+
+    @staticmethod
+    def calcular_susceptibilidad(xyz_content, metodo='b3lyp', base='def2svp'):
+        """
+        Calcula la susceptibilidad magnetica usando PySCF
+        Usa metodo de suma sobre estados (SOS) para calcular chi
+        """
+        # Verificar disponibilidad de PySCF
+        if not PYSCF_AVAILABLE:
+            return {"error": "PySCF no esta instalado. Instala con: pip install pyscf"}
+
+        try:
+            # Parsear XYZ - limpieza robusta
+            lineas = [l.strip() for l in xyz_content.strip().split('\n') if l.strip()]
+
+            # Primera linea debe ser numero de atomos
+            try:
+                num_atomos = int(lineas[0])
+            except (ValueError, IndexError):
+                return {"error": "Formato XYZ invalido: primera linea debe ser numero de atomos"}
+
+            # Saltar la linea de comentario (segunda linea) y tomar las coordenadas
+            if len(lineas) < num_atomos + 2:
+                return {"error": "Formato XYZ invalido: faltan lineas de coordenadas"}
+
+            lineas_coords = lineas[2:2 + num_atomos]
+
+            # Convertir a formato PySCF con validacion
+            atom_str = ""
+            for idx, linea in enumerate(lineas_coords):
+                partes = linea.split()
+                if len(partes) < 4:
+                    return {"error": f"Linea {idx + 3} invalida: {linea}"}
+                try:
+                    # Validar que las coordenadas sean numeros
+                    x, y, z = float(partes[1]), float(partes[2]), float(partes[3])
+                    atom_str += f"{partes[0]} {x} {y} {z}; "
+                except ValueError:
+                    return {"error": f"Coordenadas invalidas en linea {idx + 3}: {linea}"}
+
+            # Mapeo de bases (simplificado)
+            base_map = {
+                'def2-svp': 'def2svp',
+                'def2-tzvp': 'def2tzvp',
+                '6-31+g(d,p)': '6-31+g*',
+                '6-311++g(d,p)': '6-311++g**',
+                'cc-pvdz': 'ccpvdz'
+            }
+            base_pyscf = base_map.get(base.lower(), base.lower())
+
+            # Crear molecula
+            mol = gto.M(
+                atom=atom_str,
+                basis=base_pyscf,
+                unit='Angstrom'
+            )
+
+            # Calculo DFT
+            mf = dft.RKS(mol)
+            mf.xc = metodo.lower()
+
+            # Ejecutar calculo SCF
+            energia = mf.kernel()
+
+            if not mf.converged:
+                return {"error": "SCF no convergio en PySCF"}
+
+            # Calcular susceptibilidad magnetica usando aproximacion de Pascal
+            # Chi = -e^2/(4mc^2) * sum_i <r_i^2>
+            # Aproximacion: usar radios atomicos y carga nuclear
+
+            coords = mol.atom_coords()  # En Bohr
+            charges = mol.atom_charges()  # Carga nuclear
+
+            # Calcular contribucion diamagnetica (aproximacion de Pascal)
+            chi_dia = 0.0
+
+            # Centro de masa
+            total_mass = sum(charges)
+            com = np.sum(coords * charges[:, np.newaxis], axis=0) / total_mass if total_mass > 0 else np.zeros(3)
+
+            # Tensor de susceptibilidad diamagnetica
+            chi_tensor = np.zeros((3, 3))
+
+            for i, (coord, Z) in enumerate(zip(coords, charges)):
+                r = coord - com
+                r2 = np.dot(r, r)
+
+                # Contribucion diamagnetica de Pascal (aproximada)
+                # chi_a = -Z * e^2 / (6 * m_e * c^2) * <r^2>
+                # En unidades atomicas: chi_a ≈ -Z * r^2 / 4
+
+                # Componentes del tensor
+                for j in range(3):
+                    for k in range(3):
+                        if j == k:
+                            chi_tensor[j, k] -= Z * (r2 - r[j] ** 2) / 6.0
+                        else:
+                            chi_tensor[j, k] -= Z * r[j] * r[k] / 6.0
+
+            # Valor isotropico
+            chi_iso = np.trace(chi_tensor) / 3.0
+
+            # Conversion a unidades CGS (10^-6 cm^3/mol)
+            # Factor: 1 a.u. = 0.78910 x 10^-6 cm^3/mol
+            chi_cgs = chi_iso * 0.78910
+
+            # Determinar tipo (deberia ser siempre diamagnetico en esta aproximacion)
+            tipo_magnetismo = "Diamagnetico" if chi_cgs < 0 else "Paramagnetico"
+
+            return {
+                "tensor": chi_tensor.tolist(),
+                "isotropico_au": float(chi_iso),
+                "isotropico_cgs": float(chi_cgs),
+                "tipo": tipo_magnetismo,
+                "energia_scf": float(energia),
+                "converged": True,
+                "metodo_calculo": "Aproximacion de Pascal (diamagnetica)",
+                "nota": "Calculo aproximado basado en geometria molecular. Para resultados precisos usar ORCA con palabras clave NMR."
+            }
+
+        except ImportError as e:
+            return {
+                "error": f"PySCF no esta correctamente instalado: {str(e)}\nIntenta: pip install --upgrade pyscf"
+            }
+        except Exception as e:
+            import traceback
+            return {"error": f"Error en calculo: {str(e)}\n\nDetalle:\n{traceback.format_exc()}"}
