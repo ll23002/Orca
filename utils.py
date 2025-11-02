@@ -1,3 +1,4 @@
+# utils.py
 import pandas as pd
 import re
 
@@ -12,7 +13,8 @@ class Orca:
             raise FileNotFoundError(f"No se encontró el archivo de salida en: {ruta_salida}")
 
     @staticmethod
-    def generar_entrada(contenido_xyz, tipo_calculo, metodo, base, palabras_clave):
+    def generar_entrada(contenido_xyz, tipo_calculo, metodo, base, palabras_clave,
+                        calc_nmr=False):  # <-- 1. AÑADIDO calc_nmr
         palabras_base = f"! {metodo} {base} {palabras_clave}"
 
         if tipo_calculo == "Optimización de Geometría":
@@ -21,6 +23,9 @@ class Orca:
             palabras_calculo = "OPT FREQ"
         else:
             palabras_calculo = ""
+
+        if calc_nmr:
+            palabras_calculo += " NMR"
 
         encabezado = f"{palabras_base} {palabras_calculo}\n"
         lineas = contenido_xyz.strip().split('\n')
@@ -184,3 +189,36 @@ class Orca:
                     datos_cargas[tipo.capitalize()] = pd.DataFrame(cargas_orbitales)
 
         return datos_cargas if datos_cargas else None
+
+    def extraer_datos_nmr(self):
+        patron_bloque = re.compile(
+            r'CHEMICAL SHIELDING SUMMARY \(ppm\)\s*\n-+\n\n((?:.|\n)*?)(?=\n\n\s*NMR shielding tensor|\Z|\n\s*-{2,}\n)')
+        coincidencia = re.search(patron_bloque, self.contenido)
+
+        if not coincidencia:
+            return None
+
+        bloque_texto = coincidencia.group(1).strip()
+        lineas = bloque_texto.split('\n')
+
+        if len(lineas) <= 2:
+            return None
+
+        datos_nmr = []
+        for linea in lineas[2:]:
+            partes = linea.split()
+            if len(partes) == 4:
+                try:
+                    datos_nmr.append({
+                        "Núcleo": int(partes[0]),
+                        "Elemento": partes[1],
+                        "Isotrópico (ppm)": float(partes[2]),
+                        "Anisotropía (ppm)": float(partes[3])
+                    })
+                except ValueError:
+                    continue
+
+        if datos_nmr:
+            return pd.DataFrame(datos_nmr)
+
+        return None

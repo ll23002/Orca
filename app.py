@@ -47,6 +47,9 @@ if "log_completo_orca" not in st.session_state:
     st.session_state.log_completo_orca = None
 if "nombre_trabajo" not in st.session_state:
     st.session_state.nombre_trabajo = ""
+# --- 1. AÑADIR ESTADO PARA NMR ---
+if "datos_nmr" not in st.session_state:
+    st.session_state.datos_nmr = None
 
 DIR_CALCULOS = "calculations"
 os.makedirs(DIR_CALCULOS, exist_ok=True)
@@ -85,6 +88,15 @@ with st.sidebar:
             help="Corrección para frecuencias calculadas"
         )
 
+    # --- 2. AÑADIR CHECKBOX PARA NMR ---
+    st.markdown("##### 🔬 Propiedades Adicionales")
+    calc_nmr = st.checkbox(
+        "Calcular Apantallamiento (NMR)",
+        help="Calcula las propiedades de RMN (Apantallamiento Isotrópico)",
+        value=False
+    )
+    # -----------------------------------
+
     st.markdown("---")
 
     st.markdown("#### ⚙️ **Configuración Computacional**")
@@ -116,16 +128,22 @@ if boton_ejecutar:
     if st.session_state.xyz_inicial is None:
         st.sidebar.error("Por favor, carga un archivo .xyz primero.")
     else:
+        # Limpiar estados, excepto los iniciales
+        claves_a_preservar = ['xyz_inicial', 'nombre_trabajo']
         for key in st.session_state.keys():
-            if key not in ['xyz_inicial', 'nombre_trabajo']:
+            if key not in claves_a_preservar:
                 st.session_state[key] = None if not isinstance(st.session_state[key], bool) else False
 
         st.session_state.ultimo_tipo_calculo = tipo_calculo
         nombre_trabajo = st.session_state.nombre_trabajo
 
+        # --- 3. MODIFICAR LLAMADA A generar_entrada ---
         contenido_entrada = Orca.generar_entrada(
-            st.session_state.xyz_inicial, tipo_calculo, metodo, conjunto_base, palabras_clave
+            st.session_state.xyz_inicial, tipo_calculo, metodo, conjunto_base, palabras_clave,
+            calc_nmr=calc_nmr  # Pasar el valor del checkbox
         )
+        # -----------------------------------------------
+
         ruta_entrada = os.path.join(DIR_CALCULOS, f"{nombre_trabajo}.inp")
         ruta_salida = os.path.join(DIR_CALCULOS, f"{nombre_trabajo}.out")
 
@@ -171,6 +189,10 @@ if boton_ejecutar:
                 st.session_state.datos_orbitales = analizador.extraer_energias_orbitales()
                 st.session_state.datos_cargas_reducidas = analizador.extraer_cargas_orbitales_reducidas()
 
+                # --- 4. AÑADIR LLAMADA AL PARSER DE NMR ---
+                st.session_state.datos_nmr = analizador.extraer_datos_nmr()
+                # ------------------------------------------
+
                 if tipo_calculo == "Frecuencias Vibracionales (IR)":
                     st.session_state.datos_ir = analizador.extraer_espectro_ir(factor_escalamiento)
 
@@ -197,6 +219,7 @@ if st.session_state.energia_final is not None:
 
 tabs = st.tabs(["🔬 **Visualización 3D**", "📈 **Espectroscopía**", "⚡ **Análisis Energético**", "🔧 **Datos Técnicos**"])
 
+# ... (El código de tabs[0] 'Visualización 3D' no cambia) ...
 with tabs[0]:
     if not st.session_state.calculo_completado and st.session_state.xyz_inicial is None:
         st.info("💡 Carga un archivo .xyz en la barra lateral para empezar.")
@@ -224,8 +247,13 @@ with tabs[0]:
             vista_opt.zoomTo()
             showmol(vista_opt, height=450, width=450)
 
+# --- 5. REESTRUCTURAR LA PESTAÑA de Espectroscopía ---
 with tabs[1]:
-    if st.session_state.datos_ir is not None and not st.session_state.datos_ir.empty:
+    ir_disponible = st.session_state.datos_ir is not None and not st.session_state.datos_ir.empty
+    nmr_disponible = st.session_state.datos_nmr is not None and not st.session_state.datos_nmr.empty
+
+    # --- Sección de IR (sin cambios) ---
+    if ir_disponible:
         st.markdown("### 📊 **Espectro Infrarrojo (IR)**")
         fig, ax = plt.subplots(figsize=(12, 6))
         ax.stem(st.session_state.datos_ir["Frequency"], st.session_state.datos_ir["Intensity"], basefmt=' ',
@@ -237,11 +265,32 @@ with tabs[1]:
         ax.grid(True, alpha=0.3)
         st.pyplot(fig)
         st.dataframe(st.session_state.datos_ir.style.format({"Frequency": "{:.2f}", "Intensity": "{:.2f}"}))
-    elif st.session_state.ultimo_tipo_calculo == "Frecuencias Vibracionales (IR)":
+
+    # --- Mensaje de advertencia para IR (si se pidió y falló) ---
+    elif not ir_disponible and st.session_state.ultimo_tipo_calculo == "Frecuencias Vibracionales (IR)":
         st.warning(
             "⚠️ No se encontraron datos IR. Verifica que la optimización haya convergido en la pestaña de Datos Técnicos.")
-    else:
-        st.info("💡 Selecciona 'Frecuencias Vibracionales (IR)' y ejecuta un cálculo para ver el espectro.")
+
+    # --- Sección de NMR ---
+    if ir_disponible and nmr_disponible:
+        st.markdown("---")  # Separador visual si hay IR
+
+    if nmr_disponible:
+        st.markdown("### 🛡️ **Apantallamiento Nuclear (NMR)**")
+        st.info("Valores de apantallamiento isotrópico (ppm). Valores más altos indican mayor apantallamiento.")
+        st.dataframe(st.session_state.datos_nmr.style.format({
+            "Núcleo": "{}",
+            "Elemento": "{}",
+            "Isotrópico (ppm)": "{:.3f}",
+            "Anisotropía (ppm)": "{:.3f}"
+        }), use_container_width=True)
+
+    # --- Mensaje de Información general (si no hay nada) ---
+    if not ir_disponible and not nmr_disponible and st.session_state.ultimo_tipo_calculo != "Frecuencias Vibracionales (IR)":
+        st.info(
+            "💡 Selecciona 'Frecuencias Vibracionales (IR)' y/o 'Calcular Apantallamiento (NMR)' en la barra lateral y ejecuta un cálculo para ver los espectros.")
+
+# ... (El resto de 'app.py', es decir, tabs[2], tabs[3] y el pie de página, no cambian) ...
 
 with tabs[2]:
     if not st.session_state.calculo_completado:
