@@ -134,7 +134,6 @@ if boton_ejecutar:
     if st.session_state.xyz_inicial is None:
         st.sidebar.error("Por favor, carga un archivo .xyz primero.")
     else:
-        # Limpiar estados
         claves_a_preservar = ['xyz_inicial', 'nombre_trabajo']
         for key in st.session_state.keys():
             if key not in claves_a_preservar:
@@ -365,7 +364,6 @@ with tabs[2]:
             - Presencia de electrones desapareados
             - Ejemplo: O₂, NO, radicales libres
             """)
-        # Después de las métricas en el tab de Magnetismo, agrega:
         if 'nota' in datos:
             st.info(f"ℹ️ **Nota:** {datos['nota']}")
 

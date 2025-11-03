@@ -1,16 +1,10 @@
 import pandas as pd
 import re
 import numpy as np
+from pyscf import gto, dft, scf
 
-# Variables globales para indicar disponibilidad
-PYSCF_AVAILABLE = False
+PYSCF_AVAILABLE = True
 
-try:
-    from pyscf import gto, dft, scf
-
-    PYSCF_AVAILABLE = True
-except ImportError:
-    pass
 
 
 class Orca:
@@ -22,6 +16,7 @@ class Orca:
         except FileNotFoundError:
             raise FileNotFoundError(f"No se encontro el archivo de salida en: {ruta_salida}")
 
+    #proxima mejora, ignorar lineas en blanco y comentarios al parsear xyz
     @staticmethod
     def generar_entrada(contenido_xyz, tipo_calculo, metodo, base, palabras_clave,
                         calc_nmr=False):
@@ -235,48 +230,33 @@ class Orca:
 
 
 class PySCFCalculator:
-    """Clase para calculos de susceptibilidad magnetica con PySCF"""
 
     @staticmethod
     def calcular_susceptibilidad(xyz_content, metodo='b3lyp', base='def2svp'):
-        """
-        Calcula la susceptibilidad magnetica usando PySCF
-        Usa metodo de suma sobre estados (SOS) para calcular chi
-        """
-        # Verificar disponibilidad de PySCF
-        if not PYSCF_AVAILABLE:
-            return {"error": "PySCF no esta instalado. Instala con: pip install pyscf"}
-
         try:
-            # Parsear XYZ - limpieza robusta
             lineas = [l.strip() for l in xyz_content.strip().split('\n') if l.strip()]
 
-            # Primera linea debe ser numero de atomos
             try:
                 num_atomos = int(lineas[0])
             except (ValueError, IndexError):
                 return {"error": "Formato XYZ invalido: primera linea debe ser numero de atomos"}
 
-            # Saltar la linea de comentario (segunda linea) y tomar las coordenadas
             if len(lineas) < num_atomos + 2:
                 return {"error": "Formato XYZ invalido: faltan lineas de coordenadas"}
 
             lineas_coords = lineas[2:2 + num_atomos]
 
-            # Convertir a formato PySCF con validacion
             atom_str = ""
             for idx, linea in enumerate(lineas_coords):
                 partes = linea.split()
                 if len(partes) < 4:
                     return {"error": f"Linea {idx + 3} invalida: {linea}"}
                 try:
-                    # Validar que las coordenadas sean numeros
                     x, y, z = float(partes[1]), float(partes[2]), float(partes[3])
                     atom_str += f"{partes[0]} {x} {y} {z}; "
                 except ValueError:
                     return {"error": f"Coordenadas invalidas en linea {idx + 3}: {linea}"}
 
-            # Mapeo de bases (simplificado)
             base_map = {
                 'def2-svp': 'def2svp',
                 'def2-tzvp': 'def2tzvp',
@@ -286,49 +266,34 @@ class PySCFCalculator:
             }
             base_pyscf = base_map.get(base.lower(), base.lower())
 
-            # Crear molecula
             mol = gto.M(
                 atom=atom_str,
                 basis=base_pyscf,
                 unit='Angstrom'
             )
 
-            # Calculo DFT
             mf = dft.RKS(mol)
             mf.xc = metodo.lower()
 
-            # Ejecutar calculo SCF
             energia = mf.kernel()
 
             if not mf.converged:
                 return {"error": "SCF no convergio en PySCF"}
 
-            # Calcular susceptibilidad magnetica usando aproximacion de Pascal
-            # Chi = -e^2/(4mc^2) * sum_i <r_i^2>
-            # Aproximacion: usar radios atomicos y carga nuclear
 
-            coords = mol.atom_coords()  # En Bohr
-            charges = mol.atom_charges()  # Carga nuclear
+            coords = mol.atom_coords()
+            charges = mol.atom_charges()
 
-            # Calcular contribucion diamagnetica (aproximacion de Pascal)
             chi_dia = 0.0
 
-            # Centro de masa
             total_mass = sum(charges)
             com = np.sum(coords * charges[:, np.newaxis], axis=0) / total_mass if total_mass > 0 else np.zeros(3)
-
-            # Tensor de susceptibilidad diamagnetica
             chi_tensor = np.zeros((3, 3))
 
             for i, (coord, Z) in enumerate(zip(coords, charges)):
                 r = coord - com
                 r2 = np.dot(r, r)
 
-                # Contribucion diamagnetica de Pascal (aproximada)
-                # chi_a = -Z * e^2 / (6 * m_e * c^2) * <r^2>
-                # En unidades atomicas: chi_a ≈ -Z * r^2 / 4
-
-                # Componentes del tensor
                 for j in range(3):
                     for k in range(3):
                         if j == k:
@@ -336,14 +301,10 @@ class PySCFCalculator:
                         else:
                             chi_tensor[j, k] -= Z * r[j] * r[k] / 6.0
 
-            # Valor isotropico
             chi_iso = np.trace(chi_tensor) / 3.0
 
-            # Conversion a unidades CGS (10^-6 cm^3/mol)
-            # Factor: 1 a.u. = 0.78910 x 10^-6 cm^3/mol
             chi_cgs = chi_iso * 0.78910
 
-            # Determinar tipo (deberia ser siempre diamagnetico en esta aproximacion)
             tipo_magnetismo = "Diamagnetico" if chi_cgs < 0 else "Paramagnetico"
 
             return {
