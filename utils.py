@@ -18,9 +18,11 @@ class Orca:
 
     #proxima mejora, ignorar lineas en blanco y comentarios al parsear xyz
     @staticmethod
-    def generar_entrada(contenido_xyz, tipo_calculo, metodo, base, palabras_clave,
-                        calc_nmr=False):
+    def generar_entrada(contenido_xyz, tipo_calculo, metodo, base, palabras_clave, calc_nmr=False):
         palabras_base = f"! {metodo} {base} {palabras_clave}"
+
+        if "zora" in base.lower():
+            palabras_base += " ZORA"
 
         if tipo_calculo == "Optimizacion de Geometria":
             palabras_calculo = "OPT"

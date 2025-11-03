@@ -118,7 +118,7 @@ with st.sidebar:
         with col_a:
             metodo = st.selectbox("Método", ["B3LYP", "PBE0", "M06-2X", "wB97X-D"])
         with col_b:
-            conjunto_base = st.selectbox("Base", ["def2-SVP", "6-31+G(d,p)", "6-311++G(d,p)", "cc-pVDZ"])
+            conjunto_base = st.selectbox("Base", ["def2-SVP", "6-31+G(d,p)", "6-311++G(d,p)", "cc-pVDZ", "def2-TZVP-ZORA"])
 
         palabras_clave = st.text_input("Palabras clave extra", "D3BJ TIGHTSCF")
 
@@ -169,7 +169,7 @@ if boton_ejecutar:
                     check=True,
                     capture_output=True,
                     text=True,
-                    timeout=600
+                    timeout=54000
                 )
                 with open(ruta_salida, "w") as f_out:
                     f_out.write(proceso.stdout)
