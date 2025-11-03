@@ -6,6 +6,8 @@ import pandas as pd
 import py3Dmol
 from stmol import showmol
 import matplotlib.pyplot as plt
+
+from documento import generar_reporte_completo
 from utils import Orca, PySCFCalculator
 
 st.set_page_config(
@@ -51,6 +53,11 @@ if "datos_nmr" not in st.session_state:
     st.session_state.datos_nmr = None
 if "datos_susceptibilidad" not in st.session_state:
     st.session_state.datos_susceptibilidad = None
+
+if "datos_susceptibilidad" not in st.session_state:
+    st.session_state.datos_susceptibilidad = None
+if "pdf_generado" not in st.session_state:
+    st.session_state.pdf_generado = None
 
 DIR_CALCULOS = "calculations"
 os.makedirs(DIR_CALCULOS, exist_ok=True)
@@ -402,17 +409,103 @@ with tabs[3]:
 
 with tabs[4]:
     if not st.session_state.calculo_completado:
-        st.info("💡 Ejecuta un cálculo para ver los datos técnicos.")
+        st.info("💡 Ejecuta un cálculo para generar el reporte.")
     else:
-        st.markdown("### 📋 **Log de Salida de ORCA**")
-        if st.session_state.log_completo_orca:
-            st.download_button(
-                label="💾 Descargar Archivo .out Completo",
-                data=st.session_state.log_completo_orca,
-                file_name=f"{st.session_state.nombre_trabajo}.out"
-            )
-            with st.expander("📄 Ver Resumen del Log (últimas 50 líneas)"):
-                st.code(st.session_state.resumen_log_orca, language='text')
+        st.markdown("### 📄 **Generación de Reporte PDF**")
+        st.markdown("---")
+
+        col1, col2 = st.columns([2, 1])
+
+        with col1:
+            st.markdown("#### 📋 **Contenido del Reporte**")
+
+            secciones_incluidas = []
+
+            if st.session_state.energia_final is not None:
+                secciones_incluidas.append("✅ Resultados Energéticos")
+
+            if st.session_state.datos_energia is not None:
+                secciones_incluidas.append("✅ Componentes de Energía")
+
+            if st.session_state.datos_ir is not None and not st.session_state.datos_ir.empty:
+                secciones_incluidas.append("✅ Espectro Infrarrojo (IR)")
+
+            if st.session_state.datos_nmr is not None and not st.session_state.datos_nmr.empty:
+                secciones_incluidas.append("✅ Apantallamiento Nuclear (NMR)")
+
+            if st.session_state.datos_susceptibilidad is not None:
+                if 'error' not in st.session_state.datos_susceptibilidad:
+                    secciones_incluidas.append("✅ Susceptibilidad Magnética")
+
+            if st.session_state.datos_cargas is not None:
+                secciones_incluidas.append("✅ Análisis de Cargas Atómicas")
+
+            if st.session_state.datos_orbitales is not None and not st.session_state.datos_orbitales.empty:
+                secciones_incluidas.append("✅ Energías Orbitales (HOMO-LUMO)")
+
+            if secciones_incluidas:
+                st.markdown("**El reporte incluirá:**")
+                for seccion in secciones_incluidas:
+                    st.markdown(f"- {seccion}")
+            else:
+                st.warning("⚠️ No hay datos suficientes para generar el reporte.")
+
+        with col2:
+            st.markdown("#### ⚙️ **Configuración**")
+
+            st.info(f"""
+            **Molécula:** {st.session_state.nombre_trabajo}
+
+            **Método:** {metodo}
+
+            **Base:** {conjunto_base}
+
+            **Estado:** {'✅ Convergido' if st.session_state.opt_convergida else '⚠️ No convergido'}
+            """)
+
+        st.markdown("---")
+
+        st.markdown("#### 💾 **Descargar Reporte**")
+
+        col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
+
+        with col_btn1:
+            if st.button("📥 **Generar PDF**", type="primary", use_container_width=True):
+                with st.spinner("🔄 Generando reporte PDF..."):
+                    try:
+                        pdf_buffer = generar_reporte_completo(
+                            nombre_trabajo=st.session_state.nombre_trabajo,
+                            metodo=metodo,
+                            base=conjunto_base,
+                            energia_final=st.session_state.energia_final,
+                            convergida=st.session_state.opt_convergida,
+                            datos_energia=st.session_state.datos_energia,
+                            datos_ir=st.session_state.datos_ir,
+                            factor_escalamiento=factor_escalamiento if tipo_calculo == "Frecuencias Vibracionales (IR)" else 1.0,
+                            datos_nmr=st.session_state.datos_nmr,
+                            datos_susceptibilidad=st.session_state.datos_susceptibilidad,
+                            datos_cargas=st.session_state.datos_cargas,
+                            datos_orbitales=st.session_state.datos_orbitales
+                        )
+
+                        st.session_state.pdf_generado = pdf_buffer
+                        st.success("✅ Reporte PDF generado exitosamente!")
+
+                    except Exception as e:
+                        st.error(f"❌ Error al generar PDF: {str(e)}")
+                        import traceback
+
+                        st.code(traceback.format_exc())
+
+        with col_btn2:
+            if 'pdf_generado' in st.session_state and st.session_state.pdf_generado is not None:
+                st.download_button(
+                    label="📄 Descargar PDF",
+                    data=st.session_state.pdf_generado,
+                    file_name=f"{st.session_state.nombre_trabajo}_reporte.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
 
 st.markdown("---")
 st.markdown("*Desarrollado con Streamlit • Cálculos cuánticos con ORCA y PySCF*")
