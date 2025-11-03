@@ -147,26 +147,27 @@ $DFT_Energy
 $End
 $SCF_Timings
    &GeometryIndex 1
-   &TOTAL [&Type "Double"]       4.7553600000000001e-01
-   &PREP [&Type "Double"]       3.2057999999999996e-02
-   &FOCK [&Type "Double"]       4.2368799999999995e-01
-   &DENS [&Type "Double"]       1.0690000000000421e-03
-   &ETOT [&Type "Double"]       4.0200000000001346e-04
-   &POP [&Type "Double"]       9.1300000000005266e-04
-   &TRAFO [&Type "Double"]       3.9000000000000146e-04
-   &DIIS [&Type "Double"]       2.1280000000000465e-03
-   &SOSCF [&Type "Double"]       1.4119999999999688e-03
-   &XC [&Type "Double"]       1.5101999999999999e-01
-   &FOCKSTART [&Type "Double"]       3.4300000000002384e-04
-   &INT_BF [&Type "Double"]       5.4114000000000828e-02
-   &INT_DENS [&Type "Double"]       1.6269999999999452e-02
-   &INT_DENSIO [&Type "Double"]       6.1221592899999985e+02
-   &INT_FUNC [&Type "Double"]       4.5030000000000098e-02
-   &INT_POT [&Type "Double"]       1.7996999999999957e-02
-   &INT_POTIO [&Type "Double"]       5.4329999999996811e-03
-   &INT_SUM [&Type "Double"]       3.9999999999484892e-06
-   &SPLITRIJ [&Type "Double"]       1.4257000000000124e-02
-   &COSX [&Type "Double"]       2.8800000000000003e-01
+   &TOTAL [&Type "Double"]       4.5561499999999999e-01
+   &PREP [&Type "Double"]       3.1510999999999997e-02
+   &FOCK [&Type "Double"]       4.0651999999999994e-01
+   &DENS [&Type "Double"]       9.2100000000000515e-04
+   &ETOT [&Type "Double"]       3.4900000000000209e-04
+   &POP [&Type "Double"]       1.6529999999999601e-03
+   &TRAFO [&Type "Double"]       3.6099999999998633e-04
+   &DIIS [&Type "Double"]       2.1449999999999941e-03
+   &SOSCF [&Type "Double"]       1.1130000000000584e-03
+   &XC [&Type "Double"]       1.3773500000000000e-01
+   &FOCKSTART [&Type "Double"]       3.1199999999995814e-04
+   &INT_PREP [&Type "Double"]       9.9999999997324451e-07
+   &INT_BF [&Type "Double"]       5.1906999999999974e-02
+   &INT_DENS [&Type "Double"]       1.6408000000001061e-02
+   &INT_DENSIO [&Type "Double"]       5.8954500199999973e+02
+   &INT_FUNC [&Type "Double"]       3.9317000000000928e-02
+   &INT_POT [&Type "Double"]       1.4883999999998301e-02
+   &INT_POTIO [&Type "Double"]       4.3550000000005945e-03
+   &INT_SUM [&Type "Double"]       1.0000000000010001e-06
+   &SPLITRIJ [&Type "Double"]       1.3303000000000044e-02
+   &COSX [&Type "Double"]       2.8517500000000001e-01
 $End
 $VdW_Correction
    &GeometryIndex 1
@@ -234,25 +235,26 @@ $DFT_Energy
 $End
 $SCF_Timings
    &GeometryIndex 2
-   &TOTAL [&Type "Double"]       4.5964600000000000e-01
-   &PREP [&Type "Double"]       4.2130999999999995e-02
-   &FOCK [&Type "Double"]       4.0853600000000001e-01
-   &DENS [&Type "Double"]       8.6300000000000265e-04
-   &ETOT [&Type "Double"]       3.5399999999999321e-04
-   &TRAFO [&Type "Double"]       4.8799999999998844e-04
-   &DIIS [&Type "Double"]       1.0079999999999950e-03
-   &SOSCF [&Type "Double"]       1.7400000000001026e-03
-   &XC [&Type "Double"]       1.3071900000000003e-01
-   &FOCKSTART [&Type "Double"]       3.3199999999998508e-04
-   &INT_BF [&Type "Double"]       4.9676999999999402e-02
-   &INT_DENS [&Type "Double"]       1.5517000000001044e-02
-   &INT_DENSIO [&Type "Double"]       4.6826522899999969e+02
-   &INT_FUNC [&Type "Double"]       3.6919999999999759e-02
-   &INT_POT [&Type "Double"]       1.3729000000000227e-02
-   &INT_POTIO [&Type "Double"]       4.3880000000007108e-03
-   &INT_SUM [&Type "Double"]       2.9999999999752447e-06
-   &SPLITRIJ [&Type "Double"]       1.3792999999999972e-02
-   &COSX [&Type "Double"]       2.9605600000000004e-01
+   &TOTAL [&Type "Double"]       3.3855399999999997e-01
+   &PREP [&Type "Double"]       3.4013999999999996e-02
+   &FOCK [&Type "Double"]       2.9339599999999993e-01
+   &DENS [&Type "Double"]       5.9700000000001419e-04
+   &ETOT [&Type "Double"]       2.6999999999997859e-04
+   &TRAFO [&Type "Double"]       4.5000000000000595e-04
+   &DIIS [&Type "Double"]       7.9800000000000704e-04
+   &SOSCF [&Type "Double"]       1.1699999999999905e-03
+   &XC [&Type "Double"]       9.0322000000000027e-02
+   &FOCKSTART [&Type "Double"]       2.4799999999999822e-04
+   &INT_PREP [&Type "Double"]       1.0000000000010001e-06
+   &INT_BF [&Type "Double"]       3.3662999999999145e-02
+   &INT_DENS [&Type "Double"]       1.0590000000000335e-02
+   &INT_DENSIO [&Type "Double"]       3.1493608799999987e+02
+   &INT_FUNC [&Type "Double"]       2.6075000000000355e-02
+   &INT_POT [&Type "Double"]       9.8109999999998199e-03
+   &INT_POTIO [&Type "Double"]       2.7440000000001422e-03
+   &INT_SUM [&Type "Double"]       3.0000000000030003e-06
+   &SPLITRIJ [&Type "Double"]       9.6339999999999620e-03
+   &COSX [&Type "Double"]       2.2429699999999997e-01
 $End
 $VdW_Correction
    &GeometryIndex 2
@@ -320,26 +322,26 @@ $DFT_Energy
 $End
 $SCF_Timings
    &GeometryIndex 3
-   &TOTAL [&Type "Double"]       3.9542699999999997e-01
-   &PREP [&Type "Double"]       3.7911000000000000e-02
-   &FOCK [&Type "Double"]       3.3894299999999994e-01
-   &DENS [&Type "Double"]       6.4699999999995317e-04
-   &ETOT [&Type "Double"]       3.0299999999998384e-04
-   &TRAFO [&Type "Double"]       2.2699999999997722e-04
-   &DIIS [&Type "Double"]       3.6400000000000321e-04
-   &SOSCF [&Type "Double"]       1.6960000000000031e-03
-   &XC [&Type "Double"]       1.0634300000000002e-01
-   &FOCKSTART [&Type "Double"]       3.0799999999994720e-04
+   &TOTAL [&Type "Double"]       2.7640300000000001e-01
+   &PREP [&Type "Double"]       3.3009999999999998e-02
+   &FOCK [&Type "Double"]       2.2922899999999993e-01
+   &DENS [&Type "Double"]       4.3900000000002271e-04
+   &ETOT [&Type "Double"]       2.5299999999997547e-04
+   &TRAFO [&Type "Double"]       2.7699999999997171e-04
+   &DIIS [&Type "Double"]       3.2099999999998796e-04
+   &SOSCF [&Type "Double"]       1.2820000000000192e-03
+   &XC [&Type "Double"]       7.2633000000000031e-02
+   &FOCKSTART [&Type "Double"]       2.2599999999997622e-04
    &INT_PREP [&Type "Double"]       1.0000000000010001e-06
-   &INT_BF [&Type "Double"]       4.0217000000001182e-02
-   &INT_DENS [&Type "Double"]       1.2728000000000447e-02
-   &INT_DENSIO [&Type "Double"]       2.8399843099999975e+02
-   &INT_FUNC [&Type "Double"]       3.0298999999999979e-02
-   &INT_POT [&Type "Double"]       1.0967999999999020e-02
-   &INT_POTIO [&Type "Double"]       3.3509999999999235e-03
-   &INT_SUM [&Type "Double"]       3.0000000000307558e-06
-   &SPLITRIJ [&Type "Double"]       1.1160999999999983e-02
-   &COSX [&Type "Double"]       2.6153799999999999e-01
+   &INT_BF [&Type "Double"]       2.6116000000001013e-02
+   &INT_DENS [&Type "Double"]       8.2629999999992293e-03
+   &INT_DENSIO [&Type "Double"]       1.9773454700000008e+02
+   &INT_FUNC [&Type "Double"]       2.1524000000000182e-02
+   &INT_POT [&Type "Double"]       8.3989999999996429e-03
+   &INT_POTIO [&Type "Double"]       2.5640000000002952e-03
+   &INT_SUM [&Type "Double"]       1.0000000000010001e-06
+   &SPLITRIJ [&Type "Double"]       7.6690000000000091e-03
+   &COSX [&Type "Double"]       1.8317099999999994e-01
 $End
 $VdW_Correction
    &GeometryIndex 3
@@ -407,25 +409,25 @@ $DFT_Energy
 $End
 $SCF_Timings
    &GeometryIndex 4
-   &TOTAL [&Type "Double"]       3.2358199999999998e-01
-   &PREP [&Type "Double"]       3.8660999999999994e-02
-   &FOCK [&Type "Double"]       2.5366700000000003e-01
-   &DENS [&Type "Double"]       5.0200000000000244e-04
-   &ETOT [&Type "Double"]       2.6499999999995971e-04
-   &TRAFO [&Type "Double"]       2.3500000000004073e-04
-   &DIIS [&Type "Double"]       4.4100000000001083e-04
-   &SOSCF [&Type "Double"]       1.3640000000000180e-03
-   &XC [&Type "Double"]       8.5228000000000054e-02
-   &FOCKSTART [&Type "Double"]       2.7799999999998659e-04
-   &INT_BF [&Type "Double"]       3.2433999999999574e-02
-   &INT_DENS [&Type "Double"]       1.0059000000000387e-02
-   &INT_DENSIO [&Type "Double"]       1.9057887099999996e+02
-   &INT_FUNC [&Type "Double"]       2.4167999999999606e-02
-   &INT_POT [&Type "Double"]       9.0420000000001888e-03
-   &INT_POTIO [&Type "Double"]       2.5390000000004298e-03
-   &INT_SUM [&Type "Double"]       1.0000000000010001e-06
-   &SPLITRIJ [&Type "Double"]       9.2979999999999938e-03
-   &COSX [&Type "Double"]       2.1475800000000000e-01
+   &TOTAL [&Type "Double"]       2.3046200000000000e-01
+   &PREP [&Type "Double"]       3.3585999999999998e-02
+   &FOCK [&Type "Double"]       1.8621399999999999e-01
+   &DENS [&Type "Double"]       2.9800000000002047e-04
+   &ETOT [&Type "Double"]       1.9800000000001761e-04
+   &POP [&Type "Double"]       1.0000000000287557e-06
+   &TRAFO [&Type "Double"]       2.4400000000002198e-04
+   &DIIS [&Type "Double"]       2.5000000000000022e-04
+   &SOSCF [&Type "Double"]       8.1599999999998341e-04
+   &XC [&Type "Double"]       5.4569000000000006e-02
+   &FOCKSTART [&Type "Double"]       1.6499999999998460e-04
+   &INT_BF [&Type "Double"]       2.0531999999999682e-02
+   &INT_DENS [&Type "Double"]       6.5670000000002393e-03
+   &INT_DENSIO [&Type "Double"]       1.4169233900000003e+02
+   &INT_FUNC [&Type "Double"]       1.5691000000000038e-02
+   &INT_POT [&Type "Double"]       5.8840000000000767e-03
+   &INT_POTIO [&Type "Double"]       1.6370000000001383e-03
+   &SPLITRIJ [&Type "Double"]       5.5220000000000199e-03
+   &COSX [&Type "Double"]       1.5976400000000002e-01
 $End
 $VdW_Correction
    &GeometryIndex 4
@@ -598,26 +600,26 @@ $DFT_Energy
 $End
 $SCF_Timings
    &GeometryIndex 5
-   &TOTAL [&Type "Double"]       2.5386300000000001e-01
-   &PREP [&Type "Double"]       3.8279999999999995e-02
-   &FOCK [&Type "Double"]       1.9450200000000001e-01
-   &DENS [&Type "Double"]       2.8499999999997971e-04
-   &ETOT [&Type "Double"]       2.8799999999998271e-04
-   &POP [&Type "Double"]       6.2189999999999745e-03
-   &TRAFO [&Type "Double"]       2.9899999999999372e-04
-   &DIIS [&Type "Double"]       3.7299999999999833e-04
-   &SOSCF [&Type "Double"]       8.2200000000000328e-04
-   &XC [&Type "Double"]       6.2411999999999995e-02
-   &FOCKSTART [&Type "Double"]       1.9900000000000473e-04
-   &INT_BF [&Type "Double"]       2.3523999999999642e-02
-   &INT_DENS [&Type "Double"]       7.2600000000000581e-03
-   &INT_DENSIO [&Type "Double"]       1.2005304500000004e+02
-   &INT_FUNC [&Type "Double"]       1.8119999999999942e-02
-   &INT_POT [&Type "Double"]       6.8100000000000105e-03
-   &INT_POTIO [&Type "Double"]       1.7430000000002444e-03
-   &INT_SUM [&Type "Double"]       2.0000000000020002e-06
-   &SPLITRIJ [&Type "Double"]       6.5139999999999920e-03
-   &COSX [&Type "Double"]       1.7179500000000000e-01
+   &TOTAL [&Type "Double"]       1.9057199999999999e-01
+   &PREP [&Type "Double"]       3.3083999999999995e-02
+   &FOCK [&Type "Double"]       1.4868600000000001e-01
+   &DENS [&Type "Double"]       1.9500000000000073e-04
+   &ETOT [&Type "Double"]       1.6699999999998660e-04
+   &POP [&Type "Double"]       3.5929999999999851e-03
+   &TRAFO [&Type "Double"]       1.7899999999998473e-04
+   &DIIS [&Type "Double"]       2.5300000000000322e-04
+   &SOSCF [&Type "Double"]       5.5900000000000394e-04
+   &XC [&Type "Double"]       4.3786000000000040e-02
+   &FOCKSTART [&Type "Double"]       1.4799999999999536e-04
+   &INT_BF [&Type "Double"]       1.6581999999999902e-02
+   &INT_DENS [&Type "Double"]       5.2420000000000938e-03
+   &INT_DENSIO [&Type "Double"]       9.7755741000000015e+01
+   &INT_FUNC [&Type "Double"]       1.2666000000000122e-02
+   &INT_POT [&Type "Double"]       4.6749999999998598e-03
+   &INT_POTIO [&Type "Double"]       1.2249999999999622e-03
+   &INT_SUM [&Type "Double"]       1.0000000000010001e-06
+   &SPLITRIJ [&Type "Double"]       4.4239999999999835e-03
+   &COSX [&Type "Double"]       1.3372100000000001e-01
 $End
 $VdW_Correction
    &GeometryIndex 5
@@ -865,12 +867,12 @@ $Calculation_Info
 $End
 $Calculation_Timings
    &GeometryIndex 5
-   &GTOINT [&Type "Double"]       5.0139300000000009e-01
-   &SCF [&Type "Double"]       2.3920280000000003e+00
-   &SCFGRAD [&Type "Double"]       1.5342110000000004e+00
-   &GSTEP [&Type "Double"]       4.5990000000006408e-03
-   &PROPINT [&Type "Double"]       8.3731699999999931e-01
-   &RESPONSE [&Type "Double"]       4.1525400000000001e-01
-   &PROP [&Type "Double"]       3.0363279999999992e+00
-   &SUM [&Type "Double"]       8.7211300000000005e+00
+   &GTOINT [&Type "Double"]       4.5363299999999995e-01
+   &SCF [&Type "Double"]       1.9241339999999996e+00
+   &SCFGRAD [&Type "Double"]       1.3125729999999998e+00
+   &GSTEP [&Type "Double"]       1.4145000000000268e-02
+   &PROPINT [&Type "Double"]       5.9819200000000006e-01
+   &RESPONSE [&Type "Double"]       2.7344700000000000e-01
+   &PROP [&Type "Double"]       2.1341260000000002e+00
+   &SUM [&Type "Double"]       6.7102499999999994e+00
 $End

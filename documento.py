@@ -17,7 +17,6 @@ import numpy as np
 
 
 class GeneradorReportePDF:
-    """Genera reportes PDF profesionales con resultados de calculos moleculares"""
 
     def __init__(self, nombre_trabajo, metodo, base):
         self.nombre_trabajo = nombre_trabajo
@@ -28,8 +27,6 @@ class GeneradorReportePDF:
         self._configurar_estilos()
 
     def _configurar_estilos(self):
-        """Configura estilos personalizados para el documento"""
-        # Estilo para titulo principal
         self.estilos.add(ParagraphStyle(
             name='TituloPrincipal',
             parent=self.estilos['Heading1'],
@@ -40,7 +37,6 @@ class GeneradorReportePDF:
             fontName='Helvetica-Bold'
         ))
 
-        # Estilo para subtitulos
         self.estilos.add(ParagraphStyle(
             name='Subtitulo',
             parent=self.estilos['Heading2'],
@@ -51,7 +47,6 @@ class GeneradorReportePDF:
             fontName='Helvetica-Bold'
         ))
 
-        # Estilo para texto normal
         self.estilos.add(ParagraphStyle(
             name='TextoNormal',
             parent=self.estilos['Normal'],
@@ -60,7 +55,6 @@ class GeneradorReportePDF:
             spaceAfter=6
         ))
 
-        # Estilo para metadatos
         self.estilos.add(ParagraphStyle(
             name='Metadata',
             parent=self.estilos['Normal'],
@@ -70,30 +64,26 @@ class GeneradorReportePDF:
         ))
 
     def agregar_portada(self):
-        """Agrega portada al documento"""
-        # Titulo
         titulo = Paragraph(
-            f"<b>Reporte de Calculo Molecular</b>",
+            f"Reporte de Calculo Molecular",
             self.estilos['TituloPrincipal']
         )
         self.elementos.append(titulo)
         self.elementos.append(Spacer(1, 0.3 * inch))
 
-        # Nombre del trabajo
         nombre = Paragraph(
-            f"<b>Molecula:</b> {self.nombre_trabajo}",
+            f"Molecula: {self.nombre_trabajo}",
             self.estilos['Heading2']
         )
         self.elementos.append(nombre)
         self.elementos.append(Spacer(1, 0.2 * inch))
 
-        # Metadatos
         fecha = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         metadata = [
-            f"<b>Metodo:</b> {self.metodo}",
-            f"<b>Conjunto de Base:</b> {self.base}",
-            f"<b>Fecha:</b> {fecha}",
-            f"<b>Software:</b> ORCA + PySCF"
+            f"Metodo: {self.metodo}",
+            f"Conjunto de Base: {self.base}",
+            f"Fecha: {fecha}",
+            f"Software: ORCA + PySCF"
         ]
 
         for item in metadata:
@@ -102,20 +92,17 @@ class GeneradorReportePDF:
 
         self.elementos.append(Spacer(1, 0.5 * inch))
 
-        # Linea divisoria
         self.elementos.append(Spacer(1, 0.3 * inch))
         self.elementos.append(PageBreak())
 
     def agregar_seccion_energia(self, energia_final, convergida, datos_energia):
-        """Agrega seccion de resultados energeticos"""
         self.elementos.append(Paragraph("1. Resultados Energeticos", self.estilos['Subtitulo']))
 
-        # Energia final
         estado = "Convergido" if convergida else "No Convergido"
         color_estado = "green" if convergida else "red"
 
         datos = [
-            ["<b>Parametro</b>", "<b>Valor</b>"],
+            ["Parametro", "Valor"],
             ["Energia Final", f"{energia_final:.6f} Hartree"],
             ["Estado de Convergencia", f'<font color="{color_estado}">{estado}</font>'],
             ["Energia (eV)", f"{energia_final * 27.211:.4f} eV"],
@@ -138,11 +125,10 @@ class GeneradorReportePDF:
         self.elementos.append(tabla)
         self.elementos.append(Spacer(1, 0.2 * inch))
 
-        # Componentes de energia
         if datos_energia is not None and not datos_energia.empty:
             self.elementos.append(Paragraph("Componentes Energeticos", self.estilos['Heading3']))
 
-            tabla_datos = [["<b>Componente</b>", "<b>Energia (Hartree)</b>"]]
+            tabla_datos = [["Componente", "Energia (Hartree)"]]
             for idx, row in datos_energia.iterrows():
                 tabla_datos.append([idx, f"{row['Energia (Hartree)']:.6f}"])
 
@@ -161,14 +147,12 @@ class GeneradorReportePDF:
         self.elementos.append(Spacer(1, 0.3 * inch))
 
     def agregar_espectro_ir(self, datos_ir, factor_escalamiento):
-        """Agrega grafico de espectro IR"""
         if datos_ir is None or datos_ir.empty:
             return
 
         self.elementos.append(PageBreak())
         self.elementos.append(Paragraph("2. Espectro Infrarrojo (IR)", self.estilos['Subtitulo']))
 
-        # Generar grafico
         fig, ax = plt.subplots(figsize=(8, 4))
         ax.stem(datos_ir["Frequency"], datos_ir["Intensity"],
                 basefmt=' ', linefmt='red', markerfmt='ro')
@@ -178,25 +162,22 @@ class GeneradorReportePDF:
         ax.invert_xaxis()
         ax.grid(True, alpha=0.3)
 
-        # Guardar en buffer
         buf = io.BytesIO()
         plt.tight_layout()
         plt.savefig(buf, format='png', dpi=150)
         buf.seek(0)
         plt.close()
 
-        # Agregar imagen
         img = Image(buf, width=6.5 * inch, height=3.25 * inch)
         self.elementos.append(img)
         self.elementos.append(Spacer(1, 0.2 * inch))
 
-        # Tabla de frecuencias principales
         self.elementos.append(Paragraph("Frecuencias Principales", self.estilos['Heading3']))
 
         # Ordenar por intensidad y tomar top 10
         top_freqs = datos_ir.nlargest(10, 'Intensity')
 
-        tabla_datos = [["<b>Frecuencia (cm⁻¹)</b>", "<b>Intensidad (km/mol)</b>"]]
+        tabla_datos = [["Frecuencia (cm⁻¹)", "Intensidad (km/mol)"]]
         for _, row in top_freqs.iterrows():
             tabla_datos.append([
                 f"{row['Frequency']:.2f}",
@@ -217,7 +198,6 @@ class GeneradorReportePDF:
         self.elementos.append(Spacer(1, 0.3 * inch))
 
     def agregar_datos_nmr(self, datos_nmr):
-        """Agrega datos de apantallamiento NMR"""
         if datos_nmr is None or datos_nmr.empty:
             return
 
@@ -225,8 +205,8 @@ class GeneradorReportePDF:
         self.elementos.append(Paragraph("3. Apantallamiento Nuclear (NMR)", self.estilos['Subtitulo']))
 
         # Convertir DataFrame a lista para tabla
-        tabla_datos = [["<b>Nucleo</b>", "<b>Elemento</b>",
-                        "<b>Isotropico (ppm)</b>", "<b>Anisotropia (ppm)</b>"]]
+        tabla_datos = [["Nucleo", "Elemento",
+                        "Isotropico (ppm)", "Anisotropia (ppm)"]]
 
         for _, row in datos_nmr.iterrows():
             tabla_datos.append([
@@ -251,16 +231,14 @@ class GeneradorReportePDF:
         self.elementos.append(Spacer(1, 0.3 * inch))
 
     def agregar_susceptibilidad(self, datos_susc):
-        """Agrega analisis de susceptibilidad magnetica"""
         if datos_susc is None or 'error' in datos_susc:
             return
 
         self.elementos.append(PageBreak())
         self.elementos.append(Paragraph("4. Susceptibilidad Magnetica", self.estilos['Subtitulo']))
 
-        # Tabla de resultados principales
         datos = [
-            ["<b>Propiedad</b>", "<b>Valor</b>"],
+            ["Propiedad", "Valor"],
             ["Chi Isotropica (a.u.)", f"{datos_susc['isotropico_au']:.6f}"],
             ["Chi Isotropica (CGS)", f"{datos_susc['isotropico_cgs']:.2f} × 10⁻⁶ cm³/mol"],
             ["Tipo de Magnetismo", datos_susc['tipo']],
@@ -281,13 +259,12 @@ class GeneradorReportePDF:
         self.elementos.append(tabla)
         self.elementos.append(Spacer(1, 0.2 * inch))
 
-        # Tensor de susceptibilidad
         self.elementos.append(Paragraph("Tensor de Susceptibilidad (a.u.)", self.estilos['Heading3']))
 
         tensor = np.array(datos_susc['tensor'])
-        tabla_datos = [["", "<b>X</b>", "<b>Y</b>", "<b>Z</b>"]]
+        tabla_datos = [["", "X", "Y", "Z"]]
 
-        for i, label in enumerate(['<b>X</b>', '<b>Y</b>', '<b>Z</b>']):
+        for i, label in enumerate(['X', 'Y', 'Z']):
             fila = [label]
             for j in range(3):
                 fila.append(f"{tensor[i][j]:.6f}")
@@ -309,7 +286,6 @@ class GeneradorReportePDF:
         self.elementos.append(tabla_tensor)
         self.elementos.append(Spacer(1, 0.2 * inch))
 
-        # Grafico de componentes
         fig, ax = plt.subplots(figsize=(6, 3.5))
         componentes = ['χ_XX', 'χ_YY', 'χ_ZZ']
         valores = [tensor[0][0], tensor[1][1], tensor[2][2]]
@@ -330,11 +306,10 @@ class GeneradorReportePDF:
         img = Image(buf, width=5 * inch, height=2.9 * inch)
         self.elementos.append(img)
 
-        # Nota sobre aproximacion
         if 'nota' in datos_susc:
             self.elementos.append(Spacer(1, 0.2 * inch))
             nota = Paragraph(
-                f"<i><b>Nota:</b> {datos_susc['nota']}</i>",
+                f"<i>Nota: {datos_susc['nota']}</i>",
                 self.estilos['TextoNormal']
             )
             self.elementos.append(nota)
@@ -342,7 +317,6 @@ class GeneradorReportePDF:
         self.elementos.append(Spacer(1, 0.3 * inch))
 
     def agregar_cargas(self, datos_cargas):
-        """Agrega analisis de cargas atomicas"""
         if datos_cargas is None:
             return
 
@@ -352,10 +326,9 @@ class GeneradorReportePDF:
         for tipo, df in datos_cargas.items():
             self.elementos.append(Paragraph(f"Cargas de {tipo}", self.estilos['Heading3']))
 
-            # Limitar a primeros 20 atomos para no llenar mucho
             df_display = df.head(20)
 
-            tabla_datos = [["<b>Atomo</b>", "<b>Carga</b>"]]
+            tabla_datos = [["Atomo", "Carga"]]
             for _, row in df_display.iterrows():
                 tabla_datos.append([
                     row['Atomo'],
@@ -383,14 +356,12 @@ class GeneradorReportePDF:
             self.elementos.append(Spacer(1, 0.2 * inch))
 
     def agregar_orbitales(self, datos_orbitales):
-        """Agrega informacion de orbitales moleculares"""
         if datos_orbitales is None or datos_orbitales.empty:
             return
 
         self.elementos.append(PageBreak())
         self.elementos.append(Paragraph("6. Energias Orbitales", self.estilos['Subtitulo']))
 
-        # Encontrar HOMO y LUMO
         ocupados = datos_orbitales[datos_orbitales['Ocupacion'] > 0]
         vacios = datos_orbitales[datos_orbitales['Ocupacion'] == 0]
 
@@ -399,9 +370,8 @@ class GeneradorReportePDF:
             lumo = vacios.iloc[0]
             gap = lumo['Energia (eV)'] - homo['Energia (eV)']
 
-            # Tabla HOMO-LUMO
             datos = [
-                ["<b>Orbital</b>", "<b>Numero</b>", "<b>Energia (eV)</b>"],
+                ["Orbital", "Numero", "Energia (eV)"],
                 ["HOMO", str(homo['Numero']), f"{homo['Energia (eV)']:.4f}"],
                 ["LUMO", str(lumo['Numero']), f"{lumo['Energia (eV)']:.4f}"],
                 ["Gap HOMO-LUMO", "-", f"{gap:.4f}"]
@@ -421,7 +391,6 @@ class GeneradorReportePDF:
             self.elementos.append(Spacer(1, 0.3 * inch))
 
     def generar_pdf(self, nombre_archivo):
-        """Genera el archivo PDF final"""
         doc = SimpleDocTemplate(
             nombre_archivo,
             pagesize=letter,
@@ -449,19 +418,11 @@ def generar_reporte_completo(
         datos_cargas=None,
         datos_orbitales=None
 ):
-    """
-    Funcion principal para generar reporte PDF completo
-
-    Returns:
-        BytesIO: Buffer con el PDF generado
-    """
 
     generador = GeneradorReportePDF(nombre_trabajo, metodo, base)
 
-    # Agregar portada
     generador.agregar_portada()
 
-    # Agregar secciones segun datos disponibles
     if energia_final is not None:
         generador.agregar_seccion_energia(energia_final, convergida, datos_energia)
 
@@ -480,18 +441,15 @@ def generar_reporte_completo(
     if datos_orbitales is not None and not datos_orbitales.empty:
         generador.agregar_orbitales(datos_orbitales)
 
-    # Generar PDF en buffer
     buffer = io.BytesIO()
     temp_filename = f"{nombre_trabajo}_reporte.pdf"
     generador.generar_pdf(temp_filename)
 
-    # Leer archivo y guardar en buffer
     with open(temp_filename, 'rb') as f:
         buffer.write(f.read())
 
     buffer.seek(0)
 
-    # Opcional: limpiar archivo temporal
     import os
     if os.path.exists(temp_filename):
         os.remove(temp_filename)
