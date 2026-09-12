@@ -5,228 +5,245 @@ from pyscf import gto, dft, scf
 
 PYSCF_AVAILABLE = True
 
-
-
 class Orca:
-    def __init__(self, ruta_salida):
-        self.ruta = ruta_salida
+    def __init__(self, output_path):
+        self.output_path = output_path
         try:
-            with open(ruta_salida, 'r', encoding='utf-8', errors='ignore') as f:
-                self.contenido = f.read()
+            with open(output_path, 'r', encoding='utf-8', errors='ignore') as f:
+                self.content = f.read()
         except FileNotFoundError:
-            raise FileNotFoundError(f"No se encontro el archivo de salida en: {ruta_salida}")
+            raise FileNotFoundError(f"Output file not found at: {output_path}")
 
-    #proxima mejora, ignorar lineas en blanco y comentarios al parsear xyz
     @staticmethod
-    def generar_entrada(contenido_xyz, tipo_calculo, metodo, base, palabras_clave, calc_nmr=False):
-        palabras_base = f"! {metodo} {base} {palabras_clave}"
+    def generate_input(xyz_content, calculation_type, method, basis_set, extra_keywords, calc_nmr=False):
+        base_keywords = f"! {method} {basis_set} {extra_keywords}"
 
-        if "zora" in base.lower():
-            palabras_base += " ZORA"
+        if "zora" in basis_set.lower():
+            base_keywords += " ZORA"
 
-        if tipo_calculo == "Optimizacion de Geometria":
-            palabras_calculo = "OPT"
-        elif tipo_calculo == "Frecuencias Vibracionales (IR)":
-            palabras_calculo = "OPT FREQ"
+        if calculation_type == "Optimización de Geometría":
+            calc_keywords = "OPT"
+        elif calculation_type == "Frecuencias Vibracionales (IR)":
+            calc_keywords = "OPT FREQ"
         else:
-            palabras_calculo = ""
+            calc_keywords = ""
 
         if calc_nmr:
-            palabras_calculo += " NMR"
+            calc_keywords += " NMR"
 
-        encabezado = f"{palabras_base} {palabras_calculo}\n"
-        lineas = contenido_xyz.strip().split('\n')
+        header = f"{base_keywords} {calc_keywords}\n"
+        
+        lines = xyz_content.strip().split('\n')
+        num_atoms = 0
+        start_idx = 0
+        
+        for i, line in enumerate(lines):
+            try:
+                num_atoms = int(line.strip())
+                start_idx = i
+                break
+            except ValueError:
+                continue
 
-        try:
-            num_atomos = int(lineas[0].strip())
-            if len(lineas[1].strip().split()) > 1 and lineas[1].strip().split()[0].isalpha():
-                lineas_coords = lineas[1:1 + num_atomos]
-            else:
-                lineas_coords = lineas[2:2 + num_atomos]
-        except (ValueError, IndexError):
-            lineas_coords = lineas[2:]
+        coord_lines = []
+        if num_atoms > 0:
+            for line in lines[start_idx + 1:]:
+                line_str = line.strip()
+                if not line_str:
+                    continue
+                parts = line_str.split()
+                if len(parts) >= 4:
+                    try:
+                        float(parts[1])
+                        float(parts[2])
+                        float(parts[3])
+                        coord_lines.append(line_str)
+                        if len(coord_lines) == num_atoms:
+                            break
+                    except ValueError:
+                        pass
 
-        coords_str = "\n".join(lineas_coords)
-        bloque_xyz = f"* xyz 0 1\n{coords_str}\n*\n"
-        return encabezado + bloque_xyz
+        coords_str = "\n".join(coord_lines)
+        xyz_block = f"* xyz 0 1\n{coords_str}\n*\n"
+        return header + xyz_block
 
-    def verificar_convergencia(self):
-        return "THE OPTIMIZATION HAS CONVERGED" in self.contenido
+    def check_convergence(self):
+        return "THE OPTIMIZATION HAS CONVERGED" in self.content
 
-    def extraer_energia_final(self):
-        coincidencias = re.findall(r'FINAL SINGLE POINT ENERGY\s+([-\d.]+)', self.contenido)
-        if coincidencias:
-            return float(coincidencias[-1])
+    def extract_final_energy(self):
+        matches = re.findall(r'FINAL SINGLE POINT ENERGY\s+([-\d.]+)', self.content)
+        if matches:
+            return float(matches[-1])
         return None
 
-    def extraer_geometria_optimizada(self):
-        patron = r'CARTESIAN COORDINATES \(ANGSTROEM\)\s*\n\s*-+\s*\n((?:\s*\S+\s+[-\d.]+\s+[-\d.]+\s+[-\d.]+\s*\n)+)'
-        coincidencias = list(re.finditer(patron, self.contenido))
-        if not coincidencias:
+    def extract_optimized_geometry(self):
+        pattern = r'CARTESIAN COORDINATES \(ANGSTROEM\)\s*\n\s*-+\s*\n((?:\s*\S+\s+[-\d.]+\s+[-\d.]+\s+[-\d.]+\s*\n)+)'
+        matches = list(re.finditer(pattern, self.content))
+        if not matches:
             return None
 
-        bloque_coords = coincidencias[-1].group(1).strip()
-        lineas_coords = [linea.strip() for linea in bloque_coords.split('\n') if linea.strip()]
-        if not lineas_coords:
+        coords_block = matches[-1].group(1).strip()
+        coord_lines = [line.strip() for line in coords_block.split('\n') if line.strip()]
+        if not coord_lines:
             return None
 
-        num_atomos = len(lineas_coords)
-        bloque_xyz = f"{num_atomos}\nGeometria Optimizada extraida de {self.ruta}\n"
-        for linea in lineas_coords:
-            partes = linea.split()
-            if len(partes) >= 4:
-                bloque_xyz += f"{partes[0]:<2} " + " ".join(f"{float(coord):>12.6f}" for coord in partes[1:4]) + "\n"
-        return bloque_xyz
+        num_atoms = len(coord_lines)
+        xyz_block = f"{num_atoms}\nOptimized geometry extracted from {self.output_path}\n"
+        for line in coord_lines:
+            parts = line.split()
+            if len(parts) >= 4:
+                xyz_block += f"{parts[0]:<2} " + " ".join(f"{float(coord):>12.6f}" for coord in parts[1:4]) + "\n"
+        return xyz_block
 
-    def extraer_espectro_ir(self, factor_escalamiento=1.0):
-        patron = r'IR SPECTRUM\s*\n-+\n(?:.|\n)*?-+\n((?:.|\n)*?)(?=\n\s*\*|\n\s*-{2,}\n[A-Z]|\Z)'
-        coincidencia = re.search(patron, self.contenido)
+    def extract_ir_spectrum(self, scaling_factor=1.0):
+        pattern = r'IR SPECTRUM\s*\n-+\n(?:.|\n)*?-+\n((?:.|\n)*?)(?=\n\s*\*|\n\s*-{2,}\n[A-Z]|\Z)'
+        match = re.search(pattern, self.content)
 
-        if not coincidencia:
+        if not match:
             return pd.DataFrame()
 
-        datos = []
-        bloque_datos = coincidencia.group(1).strip()
+        data = []
+        data_block = match.group(1).strip()
 
-        for linea in bloque_datos.split('\n'):
-            partes = linea.split()
-            if len(partes) > 3 and partes[0].endswith(':'):
+        for line in data_block.split('\n'):
+            parts = line.split()
+            if len(parts) > 3 and parts[0].endswith(':'):
                 try:
-                    freq = float(partes[1])
-                    intensidad = float(partes[3])
+                    freq = float(parts[1])
+                    intensity = float(parts[3])
                     if freq > 10.0:
-                        datos.append({"Frequency": freq * factor_escalamiento, "Intensity": intensidad})
+                        data.append({"Frequency": freq * scaling_factor, "Intensity": intensity})
                 except (ValueError, IndexError):
                     continue
 
-        return pd.DataFrame(datos)
+        return pd.DataFrame(data)
 
-    def extraer_componentes_energia(self):
-        patrones = {
-            "Repulsion Nuclear": r'Nuclear Repulsion\s+:\s*([-\d.]+)',
-            "Energia Electronica": r'Electronic Energy\s+:\s*([-\d.]+)',
-            "Energia Un Electron": r'One Electron Energy\s+:\s*([-\d.]+)',
-            "Energia Dos Electrones": r'Two Electron Energy\s+:\s*([-\d.]+)',
+    def extract_energy_components(self):
+        patterns = {
+            "Nuclear Repulsion": r'Nuclear Repulsion\s+:\s*([-\d.]+)',
+            "Electronic Energy": r'Electronic Energy\s+:\s*([-\d.]+)',
+            "One Electron Energy": r'One Electron Energy\s+:\s*([-\d.]+)',
+            "Two Electron Energy": r'Two Electron Energy\s+:\s*([-\d.]+)',
         }
-        energias = {}
-        for nombre, patron in patrones.items():
-            coincidencias = re.findall(patron, self.contenido)
-            if coincidencias:
-                energias[nombre] = [float(coincidencias[-1])]
+        energies = {}
+        for name, pattern in patterns.items():
+            matches = re.findall(pattern, self.content)
+            if matches:
+                energies[name] = [float(matches[-1])]
 
-        return pd.DataFrame.from_dict(energias, orient='index', columns=['Energia (Hartree)']) if energias else None
+        return pd.DataFrame.from_dict(energies, orient='index', columns=['Energy (Hartree)']) if energies else None
 
-    def extraer_cargas_atomicas(self):
-        datos_cargas = {}
-        for tipo in ['MULLIKEN', 'LOEWDIN']:
-            patron = re.compile(rf'{tipo} ATOMIC CHARGES\s*\n-+\n((?:.|\n)*?)(?=\n\n|\Z)')
+    def extract_atomic_charges(self):
+        charge_data = {}
+        for charge_type in ['MULLIKEN', 'LOEWDIN']:
+            pattern = re.compile(rf'{charge_type} ATOMIC CHARGES\s*\n-+\n((?:.|\n)*?)(?=\n\n|\Z)')
 
-            coincidencias = list(re.finditer(patron, self.contenido))
-            if coincidencias:
-                coincidencia_final = coincidencias[-1]
-                cargas = []
-                for linea in coincidencia_final.group(1).strip().split('\n'):
-                    partes = linea.split()
-                    if len(partes) == 4 and partes[2] == ':':
-                        cargas.append({"Atomo": f"{partes[0]} {partes[1]}", "Carga": float(partes[3])})
-                if cargas:
-                    datos_cargas[tipo.capitalize()] = pd.DataFrame(cargas)
+            matches = list(re.finditer(pattern, self.content))
+            if matches:
+                final_match = matches[-1]
+                charges = []
+                for line in final_match.group(1).strip().split('\n'):
+                    parts = line.split()
+                    if len(parts) == 4 and parts[2] == ':':
+                        charges.append({"Atom": f"{parts[0]} {parts[1]}", "Charge": float(parts[3])})
+                if charges:
+                    charge_data[charge_type.capitalize()] = pd.DataFrame(charges)
 
-        return datos_cargas if datos_cargas else None
+        return charge_data if charge_data else None
 
-    def extraer_energias_orbitales(self):
-        patron = re.compile(r'ORBITAL ENERGIES\s*\n-+\n((?:.|\n)*?)(?=\n\n|\Z|\*Only the first)')
+    def extract_orbital_energies(self):
+        pattern = re.compile(r'ORBITAL ENERGIES\s*\n-+\n((?:.|\n)*?)(?=\n\n|\Z|\*Only the first)')
 
-        coincidencias = list(re.finditer(patron, self.contenido))
-        if not coincidencias:
+        matches = list(re.finditer(pattern, self.content))
+        if not matches:
             return None
 
-        coincidencia_final = coincidencias[-1]
+        final_match = matches[-1]
 
-        orbitales = []
-        for linea in coincidencia_final.group(1).strip().split('\n')[2:]:
-            partes = linea.split()
-            if len(partes) == 4:
-                orbitales.append({
-                    "Numero": int(partes[0]),
-                    "Ocupacion": float(partes[1]),
-                    "Energia (Eh)": float(partes[2]),
-                    "Energia (eV)": float(partes[3])
+        orbitals = []
+        for line in final_match.group(1).strip().split('\n')[2:]:
+            parts = line.split()
+            if len(parts) == 4:
+                orbitals.append({
+                    "Number": int(parts[0]),
+                    "Occupancy": float(parts[1]),
+                    "Energy (Eh)": float(parts[2]),
+                    "Energy (eV)": float(parts[3])
                 })
 
-        return pd.DataFrame(orbitales) if orbitales else None
+        return pd.DataFrame(orbitals) if orbitals else None
 
-    def extraer_cargas_orbitales_reducidas(self):
-        datos_cargas = {}
-        for tipo in ['MULLIKEN', 'LOEWDIN']:
-            patron = re.compile(
-                rf'{tipo} REDUCED ORBITAL CHARGES\s*\n-+\n((?:.|\n)*?)(?=\n\n|\Z|\s*\*+\n|\s*-{{2,}}\n[A-Z])')
+    def extract_reduced_orbital_charges(self):
+        charge_data = {}
+        for charge_type in ['MULLIKEN', 'LOEWDIN']:
+            pattern = re.compile(
+                rf'{charge_type} REDUCED ORBITAL CHARGES\s*\n-+\n((?:.|\n)*?)(?=\n\n|\Z|\s*\*+\n|\s*-{{2,}}\n[A-Z])')
 
-            coincidencias = list(re.finditer(patron, self.contenido))
-            if coincidencias:
-                coincidencia_final = coincidencias[-1]
-                cargas_orbitales = []
-                atomo_actual = ""
+            matches = list(re.finditer(pattern, self.content))
+            if matches:
+                final_match = matches[-1]
+                orbital_charges = []
+                current_atom = ""
 
-                bloque_texto = coincidencia_final.group(1).strip()
-                for linea in bloque_texto.split('\n'):
-                    linea_limpia = linea.strip()
-                    if not linea_limpia:
+                text_block = final_match.group(1).strip()
+                for line in text_block.split('\n'):
+                    clean_line = line.strip()
+                    if not clean_line:
                         continue
 
-                    partes_iniciales = linea.split()
-                    if partes_iniciales and partes_iniciales[0].isdigit():
-                        if len(partes_iniciales) > 1:
-                            atomo_actual = f"{partes_iniciales[0]} {partes_iniciales[1]}"
+                    initial_parts = line.split()
+                    if initial_parts and initial_parts[0].isdigit():
+                        if len(initial_parts) > 1:
+                            current_atom = f"{initial_parts[0]} {initial_parts[1]}"
 
-                    pares_orbital_carga = re.findall(r'([a-zA-Z0-9]+)\s*:\s*([\d.-]+)', linea)
+                    orbital_charge_pairs = re.findall(r'([a-zA-Z0-9]+)\s*:\s*([\d.-]+)', line)
 
-                    for orbital, carga in pares_orbital_carga:
-                        if orbital in ['s', 'p', 'd', 'f'] and atomo_actual:
+                    for orbital, charge in orbital_charge_pairs:
+                        if orbital in ['s', 'p', 'd', 'f'] and current_atom:
                             try:
-                                cargas_orbitales.append({
-                                    "Atomo": atomo_actual,
+                                orbital_charges.append({
+                                    "Atom": current_atom,
                                     "Orbital": orbital,
-                                    "Carga": float(carga)
+                                    "Charge": float(charge)
                                 })
                             except ValueError:
                                 continue
 
-                if cargas_orbitales:
-                    datos_cargas[tipo.capitalize()] = pd.DataFrame(cargas_orbitales)
+                if orbital_charges:
+                    charge_data[charge_type.capitalize()] = pd.DataFrame(orbital_charges)
 
-        return datos_cargas if datos_cargas else None
+        return charge_data if charge_data else None
 
-    def extraer_datos_nmr(self):
-        patron_bloque = re.compile(
+    def extract_nmr_data(self):
+        block_pattern = re.compile(
             r'CHEMICAL SHIELDING SUMMARY \(ppm\)\s*\n-+\n\n((?:.|\n)*?)(?=\n\n\s*NMR shielding tensor|\Z|\n\s*-{2,}\n)')
-        coincidencia = re.search(patron_bloque, self.contenido)
+        match = re.search(block_pattern, self.content)
 
-        if not coincidencia:
+        if not match:
             return None
 
-        bloque_texto = coincidencia.group(1).strip()
-        lineas = bloque_texto.split('\n')
+        text_block = match.group(1).strip()
+        lines = text_block.split('\n')
 
-        if len(lineas) <= 2:
+        if len(lines) <= 2:
             return None
 
-        datos_nmr = []
-        for linea in lineas[2:]:
-            partes = linea.split()
-            if len(partes) == 4:
+        nmr_data = []
+        for line in lines[2:]:
+            parts = line.split()
+            if len(parts) == 4:
                 try:
-                    datos_nmr.append({
-                        "Nucleo": int(partes[0]),
-                        "Elemento": partes[1],
-                        "Isotropico (ppm)": float(partes[2]),
-                        "Anisotropia (ppm)": float(partes[3])
+                    nmr_data.append({
+                        "Nucleus": int(parts[0]),
+                        "Element": parts[1],
+                        "Isotropic (ppm)": float(parts[2]),
+                        "Anisotropy (ppm)": float(parts[3])
                     })
                 except ValueError:
                     continue
 
-        if datos_nmr:
-            return pd.DataFrame(datos_nmr)
+        if nmr_data:
+            return pd.DataFrame(nmr_data)
 
         return None
 
@@ -234,59 +251,79 @@ class Orca:
 class PySCFCalculator:
 
     @staticmethod
-    def calcular_susceptibilidad(xyz_content, metodo='b3lyp', base='def2svp'):
+    def calculate_susceptibility(xyz_content, method='b3lyp', basis='def2svp'):
         try:
-            lineas = [l.strip() for l in xyz_content.strip().split('\n') if l.strip()]
+            lines = [l.strip() for l in xyz_content.strip().split('\n') if l.strip()]
 
-            try:
-                num_atomos = int(lineas[0])
-            except (ValueError, IndexError):
-                return {"error": "Formato XYZ invalido: primera linea debe ser numero de atomos"}
+            num_atoms = 0
+            start_idx = 0
+            for i, line in enumerate(lines):
+                try:
+                    num_atoms = int(line.strip())
+                    start_idx = i
+                    break
+                except ValueError:
+                    continue
 
-            if len(lineas) < num_atomos + 2:
-                return {"error": "Formato XYZ invalido: faltan lineas de coordenadas"}
+            if num_atoms == 0:
+                return {"error": "Invalid XYZ format: could not find number of atoms"}
 
-            lineas_coords = lineas[2:2 + num_atomos]
+            coord_lines = []
+            for line in lines[start_idx + 1:]:
+                line_str = line.strip()
+                if not line_str:
+                    continue
+                parts = line_str.split()
+                if len(parts) >= 4:
+                    try:
+                        float(parts[1])
+                        float(parts[2])
+                        float(parts[3])
+                        coord_lines.append(line_str)
+                        if len(coord_lines) == num_atoms:
+                            break
+                    except ValueError:
+                        pass
+
+            if len(coord_lines) != num_atoms:
+                return {"error": "Invalid XYZ format: could not parse coordinates"}
 
             atom_str = ""
-            for idx, linea in enumerate(lineas_coords):
-                partes = linea.split()
-                if len(partes) < 4:
-                    return {"error": f"Linea {idx + 3} invalida: {linea}"}
+            for idx, line in enumerate(coord_lines):
+                parts = line.split()
+                if len(parts) < 4:
+                    return {"error": f"Invalid line {start_idx + 3 + idx}: {line}"}
                 try:
-                    x, y, z = float(partes[1]), float(partes[2]), float(partes[3])
-                    atom_str += f"{partes[0]} {x} {y} {z}; "
+                    x, y, z = float(parts[1]), float(parts[2]), float(parts[3])
+                    atom_str += f"{parts[0]} {x} {y} {z}; "
                 except ValueError:
-                    return {"error": f"Coordenadas invalidas en linea {idx + 3}: {linea}"}
+                    return {"error": f"Invalid coordinates in line {start_idx + 3 + idx}: {line}"}
 
-            base_map = {
+            basis_map = {
                 'def2-svp': 'def2svp',
                 'def2-tzvp': 'def2tzvp',
                 '6-31+g(d,p)': '6-31+g*',
                 '6-311++g(d,p)': '6-311++g**',
                 'cc-pvdz': 'ccpvdz'
             }
-            base_pyscf = base_map.get(base.lower(), base.lower())
+            pyscf_basis = basis_map.get(basis.lower(), basis.lower())
 
             mol = gto.M(
                 atom=atom_str,
-                basis=base_pyscf,
+                basis=pyscf_basis,
                 unit='Angstrom'
             )
 
             mf = dft.RKS(mol)
-            mf.xc = metodo.lower()
+            mf.xc = method.lower()
 
-            energia = mf.kernel()
+            energy = mf.kernel()
 
             if not mf.converged:
-                return {"error": "SCF no convergio en PySCF"}
-
+                return {"error": "SCF did not converge in PySCF"}
 
             coords = mol.atom_coords()
             charges = mol.atom_charges()
-
-            chi_dia = 0.0
 
             total_mass = sum(charges)
             com = np.sum(coords * charges[:, np.newaxis], axis=0) / total_mass if total_mass > 0 else np.zeros(3)
@@ -304,26 +341,25 @@ class PySCFCalculator:
                             chi_tensor[j, k] -= Z * r[j] * r[k] / 6.0
 
             chi_iso = np.trace(chi_tensor) / 3.0
-
             chi_cgs = chi_iso * 0.78910
 
-            tipo_magnetismo = "Diamagnetico" if chi_cgs < 0 else "Paramagnetico"
+            magnetism_type = "Diamagnetic" if chi_cgs < 0 else "Paramagnetic"
 
             return {
                 "tensor": chi_tensor.tolist(),
-                "isotropico_au": float(chi_iso),
-                "isotropico_cgs": float(chi_cgs),
-                "tipo": tipo_magnetismo,
-                "energia_scf": float(energia),
+                "isotropic_au": float(chi_iso),
+                "isotropic_cgs": float(chi_cgs),
+                "type": magnetism_type,
+                "scf_energy": float(energy),
                 "converged": True,
-                "metodo_calculo": "Aproximacion de Pascal (diamagnetica)",
-                "nota": "Calculo aproximado basado en geometria molecular. Para resultados precisos usar ORCA con palabras clave NMR."
+                "calculation_method": "Pascal's approximation (diamagnetic)",
+                "note": "Approximate calculation based on molecular geometry. For precise results use ORCA with NMR keywords."
             }
 
         except ImportError as e:
             return {
-                "error": f"PySCF no esta correctamente instalado: {str(e)}\nIntenta: pip install --upgrade pyscf"
+                "error": f"PySCF is not correctly installed: {str(e)}\nTry: pip install --upgrade pyscf"
             }
         except Exception as e:
             import traceback
-            return {"error": f"Error en calculo: {str(e)}\n\nDetalle:\n{traceback.format_exc()}"}
+            return {"error": f"Error in calculation: {str(e)}\n\nDetails:\n{traceback.format_exc()}"}

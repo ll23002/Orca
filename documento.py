@@ -130,7 +130,7 @@ class GeneradorReportePDF:
 
             tabla_datos = [["Componente", "Energia (Hartree)"]]
             for idx, row in datos_energia.iterrows():
-                tabla_datos.append([idx, f"{row['Energia (Hartree)']:.6f}"])
+                tabla_datos.append([idx, f"{row['Energy (Hartree)']:.6f}"])
 
             tabla_comp = Table(tabla_datos, colWidths=[3 * inch, 2.5 * inch])
             tabla_comp.setStyle(TableStyle([
@@ -174,7 +174,6 @@ class GeneradorReportePDF:
 
         self.elementos.append(Paragraph("Frecuencias Principales", self.estilos['Heading3']))
 
-        # Ordenar por intensidad y tomar top 10
         top_freqs = datos_ir.nlargest(10, 'Intensity')
 
         tabla_datos = [["Frecuencia (cm⁻¹)", "Intensidad (km/mol)"]]
@@ -204,16 +203,15 @@ class GeneradorReportePDF:
         self.elementos.append(PageBreak())
         self.elementos.append(Paragraph("3. Apantallamiento Nuclear (NMR)", self.estilos['Subtitulo']))
 
-        # Convertir DataFrame a lista para tabla
         tabla_datos = [["Nucleo", "Elemento",
                         "Isotropico (ppm)", "Anisotropia (ppm)"]]
 
         for _, row in datos_nmr.iterrows():
             tabla_datos.append([
-                str(row['Nucleo']),
-                row['Elemento'],
-                f"{row['Isotropico (ppm)']:.3f}",
-                f"{row['Anisotropia (ppm)']:.3f}"
+                str(row['Nucleus']),
+                row['Element'],
+                f"{row['Isotropic (ppm)']:.3f}",
+                f"{row['Anisotropy (ppm)']:.3f}"
             ])
 
         tabla = Table(tabla_datos, colWidths=[1.2 * inch, 1.2 * inch, 2 * inch, 2 * inch])
@@ -239,10 +237,10 @@ class GeneradorReportePDF:
 
         datos = [
             ["Propiedad", "Valor"],
-            ["Chi Isotropica (a.u.)", f"{datos_susc['isotropico_au']:.6f}"],
-            ["Chi Isotropica (CGS)", f"{datos_susc['isotropico_cgs']:.2f} × 10⁻⁶ cm³/mol"],
-            ["Tipo de Magnetismo", datos_susc['tipo']],
-            ["Metodo de Calculo", datos_susc['metodo_calculo']]
+            ["Chi Isotropica (a.u.)", f"{datos_susc['isotropic_au']:.6f}"],
+            ["Chi Isotropica (CGS)", f"{datos_susc['isotropic_cgs']:.2f} × 10⁻⁶ cm³/mol"],
+            ["Tipo de Magnetismo", datos_susc['type']],
+            ["Metodo de Calculo", datos_susc['calculation_method']]
         ]
 
         tabla = Table(datos, colWidths=[3 * inch, 3 * inch])
@@ -306,10 +304,10 @@ class GeneradorReportePDF:
         img = Image(buf, width=5 * inch, height=2.9 * inch)
         self.elementos.append(img)
 
-        if 'nota' in datos_susc:
+        if 'note' in datos_susc:
             self.elementos.append(Spacer(1, 0.2 * inch))
             nota = Paragraph(
-                f"<i>Nota: {datos_susc['nota']}</i>",
+                f"<i>Nota: {datos_susc['note']}</i>",
                 self.estilos['TextoNormal']
             )
             self.elementos.append(nota)
@@ -331,8 +329,8 @@ class GeneradorReportePDF:
             tabla_datos = [["Atomo", "Carga"]]
             for _, row in df_display.iterrows():
                 tabla_datos.append([
-                    row['Atomo'],
-                    f"{row['Carga']:.4f}"
+                    row['Atom'],
+                    f"{row['Charge']:.4f}"
                 ])
 
             tabla = Table(tabla_datos, colWidths=[2 * inch, 2 * inch])
@@ -362,18 +360,18 @@ class GeneradorReportePDF:
         self.elementos.append(PageBreak())
         self.elementos.append(Paragraph("6. Energias Orbitales", self.estilos['Subtitulo']))
 
-        ocupados = datos_orbitales[datos_orbitales['Ocupacion'] > 0]
-        vacios = datos_orbitales[datos_orbitales['Ocupacion'] == 0]
+        ocupados = datos_orbitales[datos_orbitales['Occupancy'] > 0]
+        vacios = datos_orbitales[datos_orbitales['Occupancy'] == 0]
 
         if not ocupados.empty and not vacios.empty:
             homo = ocupados.iloc[-1]
             lumo = vacios.iloc[0]
-            gap = lumo['Energia (eV)'] - homo['Energia (eV)']
+            gap = lumo['Energy (eV)'] - homo['Energy (eV)']
 
             datos = [
                 ["Orbital", "Numero", "Energia (eV)"],
-                ["HOMO", str(homo['Numero']), f"{homo['Energia (eV)']:.4f}"],
-                ["LUMO", str(lumo['Numero']), f"{lumo['Energia (eV)']:.4f}"],
+                ["HOMO", str(homo['Number']), f"{homo['Energy (eV)']:.4f}"],
+                ["LUMO", str(lumo['Number']), f"{lumo['Energy (eV)']:.4f}"],
                 ["Gap HOMO-LUMO", "-", f"{gap:.4f}"]
             ]
 

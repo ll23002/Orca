@@ -1,0 +1,7 @@
+streamlit
+pandas
+py3Dmol
+matplotlib
+pyscf
+reportlab
+numpy
